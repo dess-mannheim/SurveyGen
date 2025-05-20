@@ -172,3 +172,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+
+#OWN FILES
+survey_gen/survey_prompting.ipynb
