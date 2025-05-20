@@ -1,0 +1,13 @@
+#TODO PREANSWERED_SURVEY
+# - Could preanswered surveys be used instead of personas to induce attributes into the LLM?
+
+#TODO TIME_MEASUREMENT
+#IDEA Measure Cost as # of generated tokens + input tokens?
+
+#TODO SUPPORT COMPLETELY OPEN QUESTIONS (For this it makes sense to implement options with a dict as well, similar to prefilled answers either you make the same prefilled answer for all or a dict that contains options)
+
+#TODO SUPPORT FOR RANDOMIZATION OF ANSWER OPTIONS/SURVEY QUESTIONS
+
+#TODO GOOD PARSERS
+
+#TODO NAMING
