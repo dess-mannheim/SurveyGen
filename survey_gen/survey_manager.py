@@ -1,13 +1,13 @@
 from typing import List, Dict, Optional, Union, Any, overload
 from dataclasses import dataclass, replace
 
-from utilities.prompt_creation import PromptCreation
-from utilities.survey_classes.survey_objects import SurveyOptions, SurveyQuestion
+from .utilities.prompt_creation import PromptCreation
+from .utilities.survey_classes.survey_objects import SurveyOptions, SurveyQuestion
 
-from parser.llm_answer_parser import LLMAnswerParser
+from .parser.llm_answer_parser import LLMAnswerParser
 
-from inference.survey_inference import batch_generation, batch_turn_by_turn_generation
-from inference.dynamic_pydantic import generate_pydantic_model
+from .inference.survey_inference import batch_generation, batch_turn_by_turn_generation
+from .inference.dynamic_pydantic import generate_pydantic_model
 
 from vllm import LLM
 from vllm.sampling_params import GuidedDecodingParams

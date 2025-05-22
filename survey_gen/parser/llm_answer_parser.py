@@ -1,9 +1,9 @@
 
 from typing import List, Dict
 
-from utilities.survey_classes.survey_objects import SurveyQuestion, SurveyOptions
+from ..utilities.survey_classes.survey_objects import SurveyQuestion, SurveyOptions
 
-from inference.survey_inference import batch_generation
+from ..inference.survey_inference import batch_generation
 
 from vllm import LLM
 
