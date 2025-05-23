@@ -58,11 +58,34 @@ class SurveyOptionGenerator:
 class InferenceOptions:
     system_prompt: str
     task_instruction: str
-    question_prompt: Dict[int, str]
-    guided_decoding: Optional[Dict[int, str]]
+    question_prompts: Dict[int, str]
+    guided_decodings: Optional[Dict[int, GuidedDecodingParams]]
+    full_guided_decoding: Optional[GuidedDecodingParams]
+    json_structure: Optional[List[str]]
+    full_json_structure: Optional[List[str]]
+    order: List[int]
 
-    def single_question(self) -> str:
-        return f"{self.task_instruction} {self.question_prompt}"
+    def create_single_question(self, question_id: int) -> str:
+        return f"{self.task_instruction} {self.question_prompts[question_id]}".strip()
+    
+    def create_all_questions(self) -> str:
+        default_prompt = f"{self.task_instruction}"
+        all_questions_prompt = ""
+        for question_prompt in self.question_prompts.values():
+            all_questions_prompt = f"{all_questions_prompt}\n{question_prompt}"
+        
+        all_prompt = default_prompt.strip() + all_questions_prompt.strip()
+        return all_prompt
+
+    def json_system_prompt(self, json_options:List[str]) -> str:
+        creator = PromptCreation()
+        creator.set_ouput_format_json(json_attributes=json_options, json_explanation=None)
+        json_appendix = creator.get_output_prompt()
+
+        system_prompt = f"""{self.system_prompt}
+{json_appendix}"""
+        return system_prompt
+
 
 DEFAULT_SYSTEM_PROMPT: str = "You will be given questions and possible answer options for each. Please reason about each question before answering."
 DEFAULT_TASK_INSTRUCTION: str = ""
@@ -204,223 +227,57 @@ class LLMSurvey:
         default_prompt = f"""{self.task_instruction}"""
 
         question_prompts = {}
+
         guided_decoding_params = None
+        extended_json_structure: List[str] = None
+        json_list: List[str] = None
+
+        order = []
 
         if json_structured_output:
             guided_decoding_params = {}
-            creator = PromptCreation()
-            creator.set_ouput_format_json(json_attributes=json_structure, json_explanation=None)
-            json_appendix = creator.get_output_prompt()
+            extended_json_structure = []
+            json_list = json_structure
 
-            system_prompt = f"""{self.system_prompt}
-{json_appendix}"""
 
-        for survey_question in survey_questions:
+        full_guided_decoding_params = None
+
+
+        constraints: Dict[str, List[str]] =  {}
+
+        for i, survey_question in enumerate(survey_questions):
             question_prompt = self.generate_question_prompt(survey_question=survey_question)
             question_prompts[survey_question.question_id] = question_prompt
-            #full_prompt = default_prompt + " " + question_prompt
-            #full_prompt = full_prompt.strip()
 
+            order.append(survey_question.question_id)
+            
             guided_decoding = None
             if json_structured_output:
-                constraints = {}
+
+                for element in json_structure:
+                    extended_json_structure.append(f"{element}{i+1}")
+                    if element == json_structure[-1]:
+                        if survey_question.options:
+                            constraints[f"{element}{i+1}"] = survey_question.options.option_descriptions
+
+                single_constraints = {}
                 if survey_question.options:
-                    constraints = {json_structure[-1]: survey_question.options.option_descriptions}
+                    single_constraints = {json_structure[-1]: survey_question.options.option_descriptions}
     
-                pydantic_model = generate_pydantic_model(fields=json_structure, constraints=constraints)
+                pydantic_model = generate_pydantic_model(fields=json_structure, constraints=single_constraints)
                 json_schema = pydantic_model.model_json_schema()
                 guided_decoding = GuidedDecodingParams(json=json_schema)
                 guided_decoding_params[survey_question.question_id] = guided_decoding
-            
-        return InferenceOptions(system_prompt, default_prompt, question_prompts, guided_decoding_params)
-
-    def conduct_survey_in_context(self, model:LLM, system_prompt:str=DEFAULT_SYSTEM_PROMPT, task_instruction: str = DEFAULT_TASK_INSTRUCTION, json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, batch_size:int=1, print_conversation:bool=False, seed:int = 42, **generation_kwargs: Any) -> Dict[int, List[str]]:
-        """
-        Conducts the entire survey multiple prompts but within the same context window.
-
-        :param model: LLM instance of vllm.
-        :param system_prompt: The system prompt of the model.
-        :param task_instruction: The task instructio the model will be prompted with.
-        :param json_structured_output: If json_structured output should be used.
-        :param json_structure: The structure the final ouput should have.
-        :param batch_size: How many inferences should run in parallel.
-        :param print_conversation: If True, the whole conversation will be printed.
-        :param generation_kwargs: All keywords needed for SamplingParams.
-        :return: Generated text by the LLM in double list format
-        """
-        survey_questions = self._questions
         
-        default_prompt = f"""{task_instruction}"""
-
-        answers = {}
-
-        assistant_messages: List[List[str]] = [[]]
-        while len(assistant_messages) <= batch_size:
-            assistant_messages.append([])
-        
-        prompts: List[List[str]] = [[]]
-        while len(prompts) <= batch_size:
-            prompts.append([])
-        for survey_question in survey_questions:
-            survey_prompt = self.generate_question_prompt(survey_question=survey_question)
-            full_prompt = default_prompt + " " + survey_prompt
-            full_prompt = full_prompt.strip()
-            for i in range(batch_size):
-                prompts[i].append(full_prompt)
-            
-            if survey_question.prefilled_answer:
-                batch_prefilled_answers = []
-
-                for i in range(batch_size):
-                    assistant_messages[i].append(survey_question.prefilled_answer)
-                    batch_prefilled_answers.append(survey_question.prefilled_answer)
-                answers[survey_question.question_id] = batch_prefilled_answers
-                continue
-
-            if json_structured_output:
-                creator = PromptCreation()
-                creator.set_ouput_format_json(json_attributes=json_structure, json_explanation=None)
-                json_appendix = creator.get_output_prompt()
-
-                json_system_prompt = f"""{system_prompt}
-{json_appendix}"""
-                constraints = {}
-                if survey_question.options:
-                    constraints = {json_structure[-1]: survey_question.options.option_descriptions}
-                
-                pydantic_model = generate_pydantic_model(fields=json_structure, constraints=constraints)
-                json_schema = pydantic_model.model_json_schema()
-                guided_decoding = GuidedDecodingParams(json=json_schema)
-                #print(json_system_prompt)
-                output = batch_turn_by_turn_generation(model, system_messages=[json_system_prompt]*batch_size, prompts=prompts, assistant_messages=assistant_messages, guided_decoding_params=[guided_decoding]*batch_size, verbose=print_conversation, seed=seed, **generation_kwargs)
-            else:
-                output = batch_turn_by_turn_generation(model, system_messages=[system_prompt]*batch_size, prompts=prompts, assistant_messages=assistant_messages, verbose=print_conversation, seed=seed, **generation_kwargs)
-            for i in range(len(output)):
-                assistant_messages[i].append(output[i])
-
-            answers[survey_question.question_id] = output
-
-        #model.shutdown()
-
-        return answers
-
-    def conduct_survey_question_by_question(self, model: LLM, system_prompt:str=DEFAULT_SYSTEM_PROMPT, task_instruction: str = DEFAULT_TASK_INSTRUCTION, json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, batch_size:int=1, print_conversation:bool=False, **generation_kwargs: Any) -> Dict[int, List[str]]:
-        """
-        Conducts the survey with each question in a new context.
-
-        :param model: LLM instance of vllm.
-        :param system_prompt: The system prompt of the model.
-        :param task_instruction: The task instructio the model will be prompted with.
-        :param json_structured_output: If json_structured output should be used.
-        :param json_structure: The structure the final ouput should have.
-        :param batch_size: How many inferences should run in parallel.
-        :param print_conversation: If True, the whole conversation will be printed.
-        :param generation_kwargs: All keywords needed for SamplingParams.
-        :return: Generated text by the LLM in double list format
-        """
-        survey_questions = self._questions
-        
-        #print(survey_questions)
-
-        default_prompt = f"""{task_instruction}"""
-
-        #model = BasicLLama(model_id)
-
-        answers = {}
-
-        for survey_question in survey_questions:
-            #print(survey_question)
-            survey_prompt = self.generate_question_prompt(survey_question=survey_question)
-            full_prompt = default_prompt + " " + survey_prompt
-            full_prompt = full_prompt.strip()
-            #if print_prompts:
-                #print(full_prompt, flush=True)
-            
-            if json_structured_output:
-                creator = PromptCreation()
-                creator.set_ouput_format_json(json_attributes=json_structure, json_explanation=None)
-                json_appendix = creator.get_output_prompt()
-
-                json_system_prompt = f"""{system_prompt}
-{json_appendix}"""
-                constraints = {}
-                if survey_question.options:
-                    constraints = {json_structure[-1]: survey_question.options.option_descriptions}
-    
-                pydantic_model = generate_pydantic_model(fields=json_structure, constraints=constraints)
-                json_schema = pydantic_model.model_json_schema()
-                guided_decoding = GuidedDecodingParams(json=json_schema)
-                output = batch_generation(model=model, system_messages=[json_system_prompt]*batch_size, prompts=[full_prompt]*batch_size, guided_decoding_params=[guided_decoding]*batch_size, verbose=print_conversation, **generation_kwargs)
-            else:
-                output = batch_generation(model=model, system_messages=[system_prompt]*batch_size, prompts=[full_prompt]*batch_size, verbose=print_conversation, **generation_kwargs)
-            answers[survey_question.question_id] = output
-        
-        #model.shutdown()
-        return answers
-
-    def conduct_whole_survey_one_prompt(self, model: LLM, system_prompt:str=DEFAULT_SYSTEM_PROMPT, task_instruction: str=DEFAULT_TASK_INSTRUCTION, json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, batch_size:int=1, print_conversation:bool=False, **generation_kwargs: Any) -> Dict[int, List[str]]:
-        """
-        Conducts the entire survey in one single LLM prompt.
-
-        :param model: LLM instance of vllm.
-        :param system_prompt: The system prompt of the model.
-        :param task_instruction: The task instructio the model will be prompted with.
-        :param json_structured_output: If json_structured output should be used.
-        :param json_structure: The structure the final ouput should have.
-        :param batch_size: How many inferences should run in parallel.
-        :param print_conversation: If True, the whole conversation will be printed.
-        :param generation_kwargs: All keywords needed for SamplingParams.
-        :return: Generated text by the LLM in double list format
-        """
-        survey_questions = self._questions
-        
-        default_prompt = f"""{task_instruction}"""
-
-        all_questions_prompt = ""
-        question_number = 1
-        extended_json_structure: List[str] = []
-        constraints: Dict[str, List[str]] =  {}
-        for i in range(len(survey_questions)):
-            survey_prompt = self.generate_question_prompt(survey_question=survey_questions[i])
-            
-            if json_structured_output:
-                for element in json_structure:
-                    extended_json_structure.append(f"{element}{i}")
-                    if element == json_structure[-1]:
-                        if survey_questions[i].options:
-                            constraints[f"{element}{i}"] = survey_questions[i].options.option_descriptions
-
-            all_questions_prompt = all_questions_prompt + "\n" + survey_prompt
-            #print(full_prompt, flush=True)
-            question_number +=1
-
-        full_prompt = default_prompt + all_questions_prompt
-    	
-        #print(full_prompt)
-
-        answers = {}
-
         if json_structured_output:
-            creator = PromptCreation()
-
-            creator.set_ouput_format_json(json_attributes=extended_json_structure, json_explanation=None)
-            json_appendix = creator.get_output_prompt()
-
-            json_system_prompt = f"""{system_prompt}
-{json_appendix}"""
-            
-            #print(json_system_prompt)
-
             pydantic_model = generate_pydantic_model(fields=extended_json_structure, constraints=constraints)
-            json_schema = pydantic_model.model_json_schema()
-            guided_decoding = GuidedDecodingParams(json=json_schema)
-            output = batch_generation(model=model, system_messages=[json_system_prompt]*batch_size, prompts=[full_prompt]*batch_size, guided_decoding_params=[guided_decoding]*batch_size, verbose=print_conversation,  **generation_kwargs)
-        else:
-            output = batch_generation(model=model, system_messages=[system_prompt]*batch_size, prompts=[full_prompt]*batch_size, verbose=print_conversation, **generation_kwargs)
+            full_json_schema = pydantic_model.model_json_schema()
+            full_guided_decoding_params = GuidedDecodingParams(json=full_json_schema)
 
-        #For consistency with other methods.
-        answers["all"] = output
-        return answers
+        return InferenceOptions(self.system_prompt, default_prompt, question_prompts, 
+                                guided_decoding_params, full_guided_decoding_params, 
+                                json_list, extended_json_structure,
+                                order)
 
 class QuestionAnswerTuple(NamedTuple):
     question: str
@@ -431,37 +288,214 @@ class SurveyResult():
     survey: LLMSurvey
     results: Dict[int, QuestionAnswerTuple]
 
-def conduct_survey_question_by_question(self, model: LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, batch_size:int=1, print_conversation:bool=False, **generation_kwargs: Any) -> List[SurveyResult]:
-        """
-        Conducts the survey with each question in a new context.
 
-        :param model: LLM instance of vllm.
-        :param system_prompt: The system prompt of the model.
-        :param task_instruction: The task instructio the model will be prompted with.
-        :param json_structured_output: If json_structured output should be used.
-        :param json_structure: The structure the final ouput should have.
-        :param batch_size: How many inferences should run in parallel.
-        :param print_conversation: If True, the whole conversation will be printed.
-        :param generation_kwargs: All keywords needed for SamplingParams.
-        :return: Generated text by the LLM in double list format
-        """
+def conduct_survey_question_by_question(model: LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, print_conversation:bool=False, seed:int = 42, **generation_kwargs: Any) -> List[SurveyResult]:
+    """
+    Conducts the survey with each question in a new context.
 
-        inference_options:List[InferenceOptions] = []
-        for survey in surveys:
-            inference_options.append(survey._generate_inference_options(json_structured_output, json_structure))
+    :param model: LLM instance of vllm.
+    :param system_prompt: The system prompt of the model.
+    :param task_instruction: The task instructio the model will be prompted with.
+    :param json_structured_output: If json_structured output should be used.
+    :param json_structure: The structure the final ouput should have.
+    :param batch_size: How many inferences should run in parallel.
+    :param print_conversation: If True, the whole conversation will be printed.
+    :param generation_kwargs: All keywords needed for SamplingParams.
+    :return: Generated text by the LLM in double list format
+    """
+    inference_options: List[InferenceOptions] = []
 
+    max_survey_length: int = 0
+    
+    question_answer_pairs: List[Dict[int, QuestionAnswerTuple]] = []
+    
+    for survey in surveys:
+        inference_option = survey._generate_inference_options(json_structured_output, json_structure)
+        inference_options.append(inference_option)
+        survey_length = len(inference_option.order)
+        if survey_length > max_survey_length:
+            max_survey_length = survey_length
 
+        question_answer_pairs.append({})
 
-        output = batch_generation(model=model, system_messages=[inference_option.system_prompt for inference_option in inference_options], 
-                                  prompts=[full_prompt]*batch_size, 
-                                  guided_decoding_params=[inference_option.guided_decoding for inference_option in inference_options], 
-                                  verbose=print_conversation, 
-                                  **generation_kwargs)
+    survey_results: List[SurveyResult] = []
 
-        answers[survey_question.question_id] = output
+    for i in range(max_survey_length):
+        current_batch = [inference_option for inference_option in inference_options if len(inference_option.order) >= i]
+
+        if json_structured_output:
+            system_messages = [inference.json_system_prompt(json_options=json_structure) for inference in current_batch]
+        else:
+            system_messages = [inference.system_prompt for inference in current_batch]
+        prompts = [inference.create_single_question(inference.order[i]) for inference in current_batch]
+        guided_decoding_params = [inference.guided_decodings[inference.order[i]] for inference in current_batch if inference.guided_decodings]
+
+        output = batch_generation(model=model, 
+                                    system_messages = system_messages, 
+                                    prompts = prompts, 
+                                    guided_decoding_params = guided_decoding_params, 
+                                    verbose=print_conversation, 
+                                    seed=seed,
+                                    **generation_kwargs)
         
-        #model.shutdown()
-        return answers
+        for survey_id, prompt, answer, item in zip(range(len(current_batch)), prompts, output, current_batch):
+            question_answer_pairs[survey_id].update({item.order[i]: QuestionAnswerTuple(prompt, answer)})
+        
+    for i, survey in enumerate(surveys):
+        survey_results.append(SurveyResult(survey, question_answer_pairs[i]))
+
+    return survey_results
+
+def conduct_whole_survey_one_prompt(model: LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, print_conversation:bool=False, seed:int = 42, **generation_kwargs: Any) -> List[SurveyResult]:
+    """
+    Conducts the entire survey in one single LLM prompt.
+
+    :param model: LLM instance of vllm.
+    :param system_prompt: The system prompt of the model.
+    :param task_instruction: The task instructio the model will be prompted with.
+    :param json_structured_output: If json_structured output should be used.
+    :param json_structure: The structure the final ouput should have.
+    :param batch_size: How many inferences should run in parallel.
+    :param print_conversation: If True, the whole conversation will be printed.
+    :param generation_kwargs: All keywords needed for SamplingParams.
+    :return: Generated text by the LLM in double list format
+    """
+    inference_options: List[InferenceOptions] = []
+
+    max_survey_length: int = 1
+    
+    question_answer_pairs: List[Dict[int, QuestionAnswerTuple]] = []
+    
+    for survey in surveys:
+        inference_option = survey._generate_inference_options(json_structured_output, json_structure)
+        inference_options.append(inference_option)
+
+        question_answer_pairs.append({})
+
+    survey_results: List[SurveyResult] = []
+
+    for i in range(max_survey_length):
+        current_batch = [inference_option for inference_option in inference_options if len(inference_option.order) >= i]
+
+        if json_structured_output:
+            system_messages = [inference.json_system_prompt(inference.full_json_structure) for inference in current_batch]
+        else:
+            system_messages = [inference.system_prompt for inference in current_batch]
+        prompts = [inference.create_all_questions() for inference in current_batch]
+
+
+        guided_decoding_params = [inference.full_guided_decoding for inference in current_batch if inference.full_guided_decoding]
+
+        output = batch_generation(model=model, 
+                                    system_messages = system_messages, 
+                                    prompts = prompts, 
+                                    guided_decoding_params = guided_decoding_params, 
+                                    verbose=print_conversation, 
+                                    seed=seed,
+                                    **generation_kwargs)
+        
+        for survey_id, prompt, answer in zip(range(len(current_batch)), prompts, output):
+            question_answer_pairs[survey_id].update({-1: QuestionAnswerTuple(prompt, answer)})
+        
+    for i, survey in enumerate(surveys):
+        survey_results.append(SurveyResult(survey, question_answer_pairs[i]))
+
+    return survey_results
+
+def conduct_survey_in_context(model:LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, print_conversation:bool=False, seed:int = 42, **generation_kwargs: Any) -> Dict[int, List[str]]:
+    """
+    Conducts the entire survey multiple prompts but within the same context window.
+
+    :param model: LLM instance of vllm.
+    :param system_prompt: The system prompt of the model.
+    :param task_instruction: The task instructio the model will be prompted with.
+    :param json_structured_output: If json_structured output should be used.
+    :param json_structure: The structure the final ouput should have.
+    :param batch_size: How many inferences should run in parallel.
+    :param print_conversation: If True, the whole conversation will be printed.
+    :param generation_kwargs: All keywords needed for SamplingParams.
+    :return: Generated text by the LLM in double list format
+    """
+
+    inference_options: List[InferenceOptions] = []
+
+    max_survey_length: int = 0
+    
+    question_answer_pairs: List[Dict[int, QuestionAnswerTuple]] = []
+    
+    for survey in surveys:
+        inference_option = survey._generate_inference_options(json_structured_output, json_structure)
+        inference_options.append(inference_option)
+        survey_length = len(inference_option.order)
+        if survey_length > max_survey_length:
+            max_survey_length = survey_length
+
+        question_answer_pairs.append({})
+
+    survey_results: List[SurveyResult] = []
+
+    all_prompts: List[List[str]] = []
+    assistant_messages: List[List[str]] = []
+
+    for i in range(len(surveys)):
+        assistant_messages.append([])
+        all_prompts.append([])
+
+    for i in range(max_survey_length):
+        current_batch = [inference_option for inference_option in inference_options if len(inference_option.order) >= i]
+        current_surveys = [surv for surv in surveys if len(surv._questions) >= i]
+
+        prompts = [inference.create_single_question(inference.order[i]) for inference in current_batch]
+        for c in range(len(current_surveys)):
+            all_prompts[c].append(prompts[c])
+
+        current_assistant_messages: List[str] = []
+
+        missing_indeces = []
+
+        for index, surv in enumerate(current_surveys):
+            prefilled_answer = surv._questions[i].prefilled_answer
+            if prefilled_answer:                
+                current_assistant_messages.append(prefilled_answer)
+                missing_indeces.append(index)
+
+        current_batch = [item for a, item in enumerate(current_batch) if a not in missing_indeces]
+
+        if len(current_batch) == 0:
+            for c in range(len(current_surveys)):
+                assistant_messages[c].append(current_assistant_messages[c])
+            for survey_id, prompt, answer, item in zip(range(len(current_surveys)), prompts, current_assistant_messages, current_surveys):
+                question_answer_pairs[survey_id].update({item._questions[i].question_id: QuestionAnswerTuple(prompt, answer)})
+            continue    
+        if json_structured_output:
+            system_messages = [inference.json_system_prompt(json_options=json_structure) for inference in current_batch]
+        else:
+            system_messages = [inference.system_prompt for inference in current_batch]
+
+        guided_decoding_params = [inference.guided_decodings[inference.order[i]] for inference in current_batch if inference.guided_decodings]
+
+        print(system_messages)
+        print(all_prompts)
+        print(assistant_messages)
+        output = batch_turn_by_turn_generation(model=model, 
+                                    system_messages = system_messages, 
+                                    prompts = all_prompts,
+                                    assistant_messages= assistant_messages,
+                                    guided_decoding_params = guided_decoding_params, 
+                                    verbose=print_conversation, 
+                                    seed=seed,
+                                    **generation_kwargs)
+        
+        for num, index in enumerate(missing_indeces):
+            output.insert(index, current_assistant_messages[num])
+        for survey_id, prompt, answer, item in zip(range(len(current_surveys)), prompts, output, current_surveys):
+            question_answer_pairs[survey_id].update({item._questions[i].question_id: QuestionAnswerTuple(prompt, answer)})
+        assistant_messages.append(output)    
+        
+    for i, survey in enumerate(surveys):
+        survey_results.append(SurveyResult(survey, question_answer_pairs[i]))
+
+    return survey_results
 
 
 if __name__ == "__main__":
