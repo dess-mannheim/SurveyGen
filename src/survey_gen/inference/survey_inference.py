@@ -17,7 +17,7 @@ def default_model_init(model_id: str, seed=42) -> LLM:
     torch.manual_seed(seed)
     print("Device_count: " + str(torch.cuda.device_count()))
 
-    return LLM(model=model_id, tensor_parallel_size=torch.cuda.device_count(), seed=seed, max_model_len=30000, enable_prefix_caching=True)
+    return LLM(model=model_id, tensor_parallel_size=torch.cuda.device_count(), seed=seed, max_model_len=2000, enable_prefix_caching=True)
 
 def shutdown_model(model: LLM) -> None:
     del model

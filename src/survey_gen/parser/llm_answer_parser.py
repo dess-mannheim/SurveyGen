@@ -58,7 +58,7 @@ def json_parse_whole_survey_all(survey_results:List[SurveyResult], json_structur
         long_df = long_df.drop(columns='question_id').rename(columns={'actual_question_id': 'question_id'})
         all_results[survey] = long_df
     
-    return 
+    return all_results
 
 
 @staticmethod

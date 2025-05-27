@@ -111,6 +111,8 @@ DEFAULT_TASK_INSTRUCTION: str = ""
 
 DEFAULT_JSON_STRUCTURE: List[str] = ["reasoning", "answer"]
 
+DEFAULT_SURVEY_ID: str = "Survey"
+
 class LLMSurvey:
     """
     A class responsible for preparing and conducting surveys on LLMs.
@@ -120,10 +122,12 @@ class LLMSurvey:
 
     DEFAULT_JSON_STRUCTURE: List[str] = ["reasoning", "answer"]
 
-    def __init__(self, survey_path: str, system_prompt: str = DEFAULT_SYSTEM_PROMPT, task_instruction: str = DEFAULT_TASK_INSTRUCTION, verbose=False):
+    def __init__(self, survey_path: str, survey_name:str = DEFAULT_SURVEY_ID,  system_prompt: str = DEFAULT_SYSTEM_PROMPT, task_instruction: str = DEFAULT_TASK_INSTRUCTION, verbose=False):
         #random.seed(seed)
         self.load_survey(survey_path=survey_path)
         self.verbose = verbose
+
+        self.survey_name = survey_name
 
         self.system_prompt: str = system_prompt 
         self.task_instruction: str = task_instruction
