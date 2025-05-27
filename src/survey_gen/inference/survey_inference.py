@@ -26,7 +26,7 @@ def shutdown_model(model: LLM) -> None:
         torch.cuda.empty_cache()
     return None
 
-def batch_generation(model = LLM, system_messages:list[str]=["You are a helpful assistant."], prompts:list[str]=["Hi there! What is your name?"], guided_decoding_params: Optional[List[GuidedDecodingParams]] = None, seed: int = 42, verbose:bool=False, **generation_kwargs: Any):
+def batch_generation(model = LLM, system_messages:list[str]=["You are a helpful assistant."], prompts:list[str]=["Hi there! What is your name?"], guided_decoding_params: Optional[List[GuidedDecodingParams]] = None, seed: int = 42, print_conversation:bool=False, print_progress:bool=True, **generation_kwargs: Any):
     random.seed(seed)
     
     # Prepare batch of messages
@@ -50,10 +50,10 @@ def batch_generation(model = LLM, system_messages:list[str]=["You are a helpful 
             for i in range(batch_size)
         ]
 
-    outputs:List[RequestOutput] = model.chat(batch_messages, sampling_params=sampling_params_list, use_tqdm=verbose)
+    outputs:List[RequestOutput] = model.chat(batch_messages, sampling_params=sampling_params_list, use_tqdm=print_progress)
     result = [output.outputs[0].text for output in outputs]
 
-    if verbose:
+    if print_conversation:
         print("Conversation:")
         for system_message, prompt, answer in zip(system_messages, prompts, result):
             print("System Message")
@@ -66,7 +66,7 @@ def batch_generation(model = LLM, system_messages:list[str]=["You are a helpful 
     return result
 
     
-def batch_turn_by_turn_generation(model:LLM, system_messages:List[str]=["You are a helpful assistant."], prompts:List[List[str]]=[["Hi there! What is your name?", "Interesting"]], assistant_messages:List[List[str]]=None, guided_decoding_params: Optional[List[GuidedDecodingParams]] = None, seed: int = 42, verbose:bool=False, **generation_kwargs) -> List[str]:
+def batch_turn_by_turn_generation(model:LLM, system_messages:List[str]=["You are a helpful assistant."], prompts:List[List[str]]=[["Hi there! What is your name?", "Interesting"]], assistant_messages:List[List[str]]=None, guided_decoding_params: Optional[List[GuidedDecodingParams]] = None, seed: int = 42, print_conversation:bool=False, print_progress:bool=True, **generation_kwargs) -> List[str]:
     random.seed(seed)
     batch_messages = []
     batch_size = len(system_messages)
@@ -103,10 +103,10 @@ def batch_turn_by_turn_generation(model:LLM, system_messages:List[str]=["You are
 
     #print(batch_messages, flush=True)
 
-    outputs: List[RequestOutput] = model.chat(batch_messages, sampling_params=sampling_params_list, use_tqdm=verbose)
+    outputs: List[RequestOutput] = model.chat(batch_messages, sampling_params=sampling_params_list, use_tqdm=print_progress)
     result = [output.outputs[0].text for output in outputs]
     
-    if verbose:
+    if print_conversation:
         print("Conversation:")
         for system_message, prompt_list, assistant_list, answer in zip(system_messages, prompts, assistant_messages, result):
             print("System Prompt:")

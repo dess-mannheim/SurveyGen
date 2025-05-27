@@ -357,7 +357,8 @@ def conduct_survey_question_by_question(model: LLM, surveys: List[LLMSurvey], js
                                     system_messages = system_messages, 
                                     prompts = prompts, 
                                     guided_decoding_params = guided_decoding_params, 
-                                    verbose=print_conversation, 
+                                    print_conversation=print_conversation, 
+                                    print_progress=print_progress,
                                     seed=seed,
                                     **generation_kwargs)
         
@@ -413,7 +414,8 @@ def conduct_whole_survey_one_prompt(model: LLM, surveys: List[LLMSurvey], json_s
                                     system_messages = system_messages, 
                                     prompts = prompts, 
                                     guided_decoding_params = guided_decoding_params, 
-                                    verbose=print_conversation, 
+                                    print_conversation=print_conversation, 
+                                    print_progress=print_progress,
                                     seed=seed,
                                     **generation_kwargs)
         
@@ -502,7 +504,8 @@ def conduct_survey_in_context(model:LLM, surveys: List[LLMSurvey], json_structur
                                     prompts = all_prompts,
                                     assistant_messages= assistant_messages,
                                     guided_decoding_params = guided_decoding_params, 
-                                    verbose=print_conversation, 
+                                    print_conversation=print_conversation, 
+                                    print_progress=print_progress,
                                     seed=seed,
                                     **generation_kwargs)
         
