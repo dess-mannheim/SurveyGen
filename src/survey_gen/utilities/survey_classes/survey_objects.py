@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, NamedTuple, Dict
 
 from dataclasses import dataclass
 
@@ -17,6 +17,10 @@ class SurveyOptions:
         else:
             options_prompt = f"Options range from {self.option_descriptions[0]} to {self.option_descriptions[-1]}"
         return options_prompt
+
+class QuestionAnswerTuple(NamedTuple):
+    question: str
+    answer: str
 
 @dataclass
 class SurveyQuestion:

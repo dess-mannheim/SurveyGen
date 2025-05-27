@@ -1,10 +1,8 @@
-from typing import List, Dict, Optional, Union, Any, overload, Tuple, NamedTuple
+from typing import List, Dict, Optional, Union, Any, overload, Tuple, NamedTuple, Self
 from dataclasses import dataclass, replace
 
 from .utilities.prompt_creation import PromptCreation
-from .utilities.survey_classes.survey_objects import SurveyOptions, SurveyQuestion
-
-from .parser.llm_answer_parser import LLMAnswerParser
+from .utilities.survey_classes.survey_objects import SurveyOptions, SurveyQuestion, QuestionAnswerTuple
 
 from .inference.survey_inference import batch_generation, batch_turn_by_turn_generation
 from .inference.dynamic_pydantic import generate_pydantic_model
@@ -15,6 +13,10 @@ from vllm.sampling_params import GuidedDecodingParams
 import pandas as pd
 
 import random
+
+import copy
+
+import tqdm
 
 class SurveyOptionGenerator:
     #TODO This probably should be its own file instead. My Java programming took over :D
@@ -103,16 +105,19 @@ class LLMSurvey:
 
     def __init__(self, survey_path: str, system_prompt: str = DEFAULT_SYSTEM_PROMPT, task_instruction: str = DEFAULT_TASK_INSTRUCTION, verbose=False):
         #random.seed(seed)
-        self._questions: List[SurveyQuestion] = self.load_survey(survey_path=survey_path)
+        self.load_survey(survey_path=survey_path)
         self.verbose = verbose
 
         self.system_prompt: str = system_prompt 
         self.task_instruction: str = task_instruction
 
+    def duplicate(self):
+        return copy.deepcopy(self)
+
     def get_survey_questions(self) -> str:
         return self._questions
 
-    def load_survey(self, survey_path: str) -> List[SurveyQuestion]:
+    def load_survey(self, survey_path: str) -> Self:
         """
         Loads a prepared survey in csv format from a path.
 
@@ -135,21 +140,21 @@ class LLMSurvey:
             survey_questions.append(generated_survey_question)
 
         self._questions = survey_questions
-        return survey_questions
+        return self
     
     @overload
     def prepare_survey(self, prompt: Optional[str] = "Do you see yourself as someone who...", 
                        options: Optional[SurveyOptions] = None, 
-                       prefilled_answers: Optional[Dict[int, str]] = None) -> List[SurveyQuestion]: ...
+                       prefilled_answers: Optional[Dict[int, str]] = None) -> Self: ...
 
     @overload
     def prepare_survey(self, prompt: Optional[List[str]] = ["Do you see yourself as someone who..."], 
                        options: Optional[Dict[int, SurveyOptions]] = None, 
-                       prefilled_answers: Optional[Dict[int, str]] = None) -> List[SurveyQuestion]: ...
+                       prefilled_answers: Optional[Dict[int, str]] = None) -> Self: ...
     
     def prepare_survey(self, prompt: Optional[Union[str, List[str]]] = "Do you see yourself as someone who...", 
                        options: Optional[Union[SurveyOptions, Dict[int, SurveyOptions]]] = None, 
-                       prefilled_answers: Optional[Dict[int, str]] = None) -> List[SurveyQuestion]:
+                       prefilled_answers: Optional[Dict[int, str]] = None) -> Self:
         """
         Prepares a survey with additional prompts for each question, answer options and prefilled answers.
 
@@ -203,7 +208,7 @@ class LLMSurvey:
                 updated_questions.append(new_survey_question)
                     
         self._questions = updated_questions
-        return updated_questions
+        return self
 
     def generate_question_prompt(self, survey_question: SurveyQuestion) -> str:
         """
@@ -279,9 +284,6 @@ class LLMSurvey:
                                 json_list, extended_json_structure,
                                 order)
 
-class QuestionAnswerTuple(NamedTuple):
-    question: str
-    answer: str
 
 @dataclass
 class SurveyResult():
@@ -289,7 +291,7 @@ class SurveyResult():
     results: Dict[int, QuestionAnswerTuple]
 
 
-def conduct_survey_question_by_question(model: LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, print_conversation:bool=False, seed:int = 42, **generation_kwargs: Any) -> List[SurveyResult]:
+def conduct_survey_question_by_question(model: LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, print_conversation:bool=False, print_progress: bool = True, seed:int = 42, **generation_kwargs: Any) -> List[SurveyResult]:
     """
     Conducts the survey with each question in a new context.
 
@@ -320,8 +322,8 @@ def conduct_survey_question_by_question(model: LLM, surveys: List[LLMSurvey], js
 
     survey_results: List[SurveyResult] = []
 
-    for i in range(max_survey_length):
-        current_batch = [inference_option for inference_option in inference_options if len(inference_option.order) >= i]
+    for i in (tqdm.tqdm(range(max_survey_length)) if print_progress else range(max_survey_length)):
+        current_batch = [inference_option for inference_option in inference_options if len(inference_option.order) > i]
 
         if json_structured_output:
             system_messages = [inference.json_system_prompt(json_options=json_structure) for inference in current_batch]
@@ -346,7 +348,7 @@ def conduct_survey_question_by_question(model: LLM, surveys: List[LLMSurvey], js
 
     return survey_results
 
-def conduct_whole_survey_one_prompt(model: LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, print_conversation:bool=False, seed:int = 42, **generation_kwargs: Any) -> List[SurveyResult]:
+def conduct_whole_survey_one_prompt(model: LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, print_conversation:bool=False, print_progress: bool = True, seed:int = 42, **generation_kwargs: Any) -> List[SurveyResult]:
     """
     Conducts the entire survey in one single LLM prompt.
 
@@ -374,8 +376,8 @@ def conduct_whole_survey_one_prompt(model: LLM, surveys: List[LLMSurvey], json_s
 
     survey_results: List[SurveyResult] = []
 
-    for i in range(max_survey_length):
-        current_batch = [inference_option for inference_option in inference_options if len(inference_option.order) >= i]
+    for i in (tqdm.tqdm(range(max_survey_length)) if print_progress else range(max_survey_length)):
+        current_batch = [inference_option for inference_option in inference_options if len(inference_option.order) > i]
 
         if json_structured_output:
             system_messages = [inference.json_system_prompt(inference.full_json_structure) for inference in current_batch]
@@ -402,7 +404,7 @@ def conduct_whole_survey_one_prompt(model: LLM, surveys: List[LLMSurvey], json_s
 
     return survey_results
 
-def conduct_survey_in_context(model:LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, print_conversation:bool=False, seed:int = 42, **generation_kwargs: Any) -> Dict[int, List[str]]:
+def conduct_survey_in_context(model:LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, print_conversation:bool=False, print_progress: bool = True, seed:int = 42, **generation_kwargs: Any) -> List[SurveyResult]:
     """
     Conducts the entire survey multiple prompts but within the same context window.
 
@@ -441,9 +443,9 @@ def conduct_survey_in_context(model:LLM, surveys: List[LLMSurvey], json_structur
         assistant_messages.append([])
         all_prompts.append([])
 
-    for i in range(max_survey_length):
-        current_batch = [inference_option for inference_option in inference_options if len(inference_option.order) >= i]
-        current_surveys = [surv for surv in surveys if len(surv._questions) >= i]
+    for i in (tqdm.tqdm(range(max_survey_length)) if print_progress else range(max_survey_length)):
+        current_batch = [inference_option for inference_option in inference_options if len(inference_option.order) > i]
+        current_surveys = [surv for surv in surveys if len(surv._questions) > i]
 
         prompts = [inference.create_single_question(inference.order[i]) for inference in current_batch]
         for c in range(len(current_surveys)):
@@ -474,9 +476,6 @@ def conduct_survey_in_context(model:LLM, surveys: List[LLMSurvey], json_structur
 
         guided_decoding_params = [inference.guided_decodings[inference.order[i]] for inference in current_batch if inference.guided_decodings]
 
-        print(system_messages)
-        print(all_prompts)
-        print(assistant_messages)
         output = batch_turn_by_turn_generation(model=model, 
                                     system_messages = system_messages, 
                                     prompts = all_prompts,
