@@ -311,6 +311,12 @@ class SurveyResult():
     survey: LLMSurvey
     results: Dict[int, QuestionAnswerTuple]
 
+    def to_dataframe(self) -> pd.DataFrame:
+        answers = []
+        for item_id, question_answer_tuple in self.results.items():
+            answers.append((item_id, *question_answer_tuple))
+        return pd.DataFrame(answers, columns=["item_id", *question_answer_tuple._fields])
+
 
 def conduct_survey_question_by_question(model: LLM, surveys: List[LLMSurvey], json_structured_output:bool=False, json_structure: List[str] = DEFAULT_JSON_STRUCTURE, print_conversation:bool=False, print_progress: bool = True, seed:int = 42, **generation_kwargs: Any) -> List[SurveyResult]:
     """

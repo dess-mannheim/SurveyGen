@@ -1,11 +1,9 @@
 
 from typing import List, Dict
 
-from ..utilities.survey_classes.survey_objects import SurveyQuestion, QuestionAnswerTuple
+from ..survey_manager import SurveyResult, LLMSurvey
 
 from ..inference.survey_inference import batch_generation
-
-from ..survey_manager import SurveyResult, LLMSurvey
 
 from vllm import LLM
 
@@ -17,10 +15,13 @@ from survey_gen.survey_manager import SurveyResult, LLMSurvey
 
 
 DEFAULT_SYSTEM_PROMPT: str = "You are a helpful assistant."
-DEFAULT_PROMPT: str = "Your task is to parse the correct answer option from an open text answer a LLM has given to survey questions. You will be provided with the possible answer options and the full text answer. Answer ONLY and EXACTLY with one of the possible answer options or 'INVALID', if the provided answer does give on of the options."
+DEFAULT_PROMPT: str = "Your task is to parse the correct answer option from an open text answer a LLM has given to survey questions. You will be provided with the survey question, possible answer options and the LLM answer. Answer ONLY and EXACTLY with one of the possible answer options or 'INVALID', if the provided LLM answer does give one of the options."
 
 def json_parser_str(answer:str) -> Dict[str, str]:
-    result_json = yaml.safe_load(answer)
+    try:
+        result_json = yaml.safe_load(answer)
+    except:
+        return None
 
     return result_json
 
@@ -32,8 +33,12 @@ def json_parse_all(survey_results: List[SurveyResult]) -> Dict[LLMSurvey, pd.Dat
         for key, value in survey_result.results.items():
             #value:QuestionAnswerTuple
             parsed_answer = json_parser_str(value.answer)
-            answers.append((key, value.question, *parsed_answer.values()))
-        df = pd.DataFrame(answers, columns=["question_id", "question", *parsed_answer.keys()]).sort_values(by="question_id")
+            if parsed_answer:
+                answer_format = parsed_answer.keys()
+                answers.append((key, value.question, *parsed_answer.values()))
+            else:
+                answers.append((key, value, "ERROR: Parsing"))
+        df = pd.DataFrame(answers, columns=["question_id", "question", *answer_format]).sort_values(by="question_id")
         final_result[survey_result.survey] = df
 
     return final_result
@@ -60,13 +65,29 @@ def json_parse_whole_survey_all(survey_results:List[SurveyResult], json_structur
     
     return all_results
 
-
-@staticmethod
-def llm_parse_all(model:LLM, survey_results:List[SurveyResult], system_prompt:str = DEFAULT_SYSTEM_PROMPT, prompt:str = DEFAULT_PROMPT, use_structured_ouput:bool = False, batch_size:int = 2) -> Dict[LLMSurvey, pd.DataFrame]:
-    #TODO LLM Parser in batches, same output as json parser
-    results = []
-
+def raw_responses(survey_results:List[SurveyResult])-> Dict[LLMSurvey, pd.DataFrame]:
+    all_results = {}
     for survey_result in survey_results:
+        all_results[survey_result.survey] = survey_result.to_dataframe()
+    return all_results
+
+
+def llm_parse_all(model:LLM, survey_results:List[SurveyResult], system_prompt:str = DEFAULT_SYSTEM_PROMPT, prompt:str = DEFAULT_PROMPT, use_structured_ouput:bool = False, seed = 42, **generation_kwargs) -> Dict[LLMSurvey, pd.DataFrame]:
+    #TODO LLM Parser in batches, same output as json parser
+    all_results = {}
+    for survey_result in survey_results:
+        prompts = []
+        ids = []
+        questions = []
         answers = []
-        for key, value in survey_result.results.items():
-            pass
+        for item_id, question_answer_tuple in survey_result.results.items():
+            ids.append(item_id)
+            questions.append(question_answer_tuple.question)
+            answers.append(question_answer_tuple.answer)
+            prompts.append(f"{prompt} \nQuestion: {question_answer_tuple.question} \nLLManswer: {question_answer_tuple.answer}")
+        llm_parsed_results = batch_generation(model, system_messages=[system_prompt] * len(prompts), prompts=prompts, seed=seed, **generation_kwargs)
+
+
+        all_results[survey_result.survey] = pd.DataFrame(zip(ids, questions, answers, llm_parsed_results), columns=["item_id", "item", "full_answer", "parsed_result"])
+
+    return all_results
