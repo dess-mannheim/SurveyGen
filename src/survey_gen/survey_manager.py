@@ -75,6 +75,7 @@ class SurveyOptionGenerator:
                     answer_option = f"{option_number}: {descriptions[i]}"
                 answer_options.append(answer_option)
         else:
+            #TODO @Jens add these to constants.py
             if idx_type == "char_low":
                 for i in range(n):
                     answer_option = f"{ascii_lowercase[i]}: {descriptions[i]}"
@@ -373,13 +374,15 @@ class LLMSurvey:
         :param survey_question: Survey question to prompt.
         :return: Prompt that will be given to the model for this question.
         """
-        #TODO allow for customization of placement
-        if survey_question.answer_options:
-            options_prompt = survey_question.answer_options.create_options_str()
-            question_prompt = f"""{survey_question.question_stem} {survey_question.question_content} 
-{options_prompt}"""
+        if constants.QUESTION_CONTENT_PLACEHOLDER in survey_question.question_stem:
+            question_prompt = survey_question.question_stem.format(**{constants.QUESTION_CONTENT_PLACEHOLDER: survey_question.question_content})
         else:
             question_prompt = f"""{survey_question.question_stem} {survey_question.question_content}"""
+
+        if survey_question.answer_options:
+            options_prompt = survey_question.answer_options.create_options_str()
+            question_prompt = f"""{question_prompt} 
+{options_prompt}"""
 
         return question_prompt
     

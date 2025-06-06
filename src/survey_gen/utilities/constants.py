@@ -8,6 +8,7 @@ SURVEY_ITEM: Final[str] = "survey_item"
 #Question
 QUESTION_STEM: Final[str] = "question_stem"
 QUESTION_CONTENT: Final[str] = "question_content"
+QUESTION_CONTENT_PLACEHOLDER: Final[str] = "QUESTION_CONTENT_PLACEHOLDER"
 QUESTION: Final[str] = "question"
 
 #Answer
