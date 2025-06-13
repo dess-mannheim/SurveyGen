@@ -19,13 +19,6 @@ def default_model_init(model_id: str, seed:int=42, **model_keywords) -> LLM:
 
     return LLM(model=model_id, tensor_parallel_size=torch.cuda.device_count(), seed=seed, enable_prefix_caching=True, **model_keywords)
 
-def shutdown_model(model: LLM) -> None:
-    del model
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    return None
-
 def batch_generation(model = LLM, system_messages:list[str]=["You are a helpful assistant."], prompts:list[str]=["Hi there! What is your name?"], guided_decoding_params: Optional[List[GuidedDecodingParams]] = None, seed: int = 42, print_conversation:bool=False, print_progress:bool=True, **generation_kwargs: Any):
     random.seed(seed)
     

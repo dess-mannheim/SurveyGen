@@ -11,8 +11,9 @@ from vllm import LLM
 
 import pandas as pd
 
-import yaml
 import json
+
+import re
 
 from collections import defaultdict
 
@@ -46,15 +47,33 @@ def json_parse_all(survey_results: List[SurveyResult]) -> Dict[LLMSurvey, pd.Dat
 
     return final_result
 
-
-def json_parse_whole_survey_all(survey_results:List[SurveyResult], json_structure:List[str]) -> Dict[LLMSurvey, pd.DataFrame]:
+def json_parse_whole_survey_all(survey_results:List[SurveyResult]) -> Dict[LLMSurvey, pd.DataFrame]:
     parsed_results =  json_parse_all(survey_results)
     
     all_results = {}
 
     for survey, df in parsed_results.items():
+        pattern = re.compile(r"^([a-zA-Z_]+)(\d+)$")
+        matched = [pattern.match(col) for col in df.columns]
+
+        stubnames = set()
+        reshape_cols = []
+        static_cols = []
+        seen_stubs = set()
+        stubnames = []
+
+        for col, m in zip(df.columns, matched):
+            if m:
+                stub = m.group(1)
+                reshape_cols.append(col)
+                if stub not in seen_stubs:
+                    stubnames.append(stub)
+                    seen_stubs.add(stub)
+            else:
+                static_cols.append(col)
+
         long_df = pd.wide_to_long(df, 
-                                stubnames=json_structure, 
+                                stubnames=stubnames,
                                 i=[constants.SURVEY_ITEM_ID],
                                 j='new_survey_item_id', 
                                 sep='', 
