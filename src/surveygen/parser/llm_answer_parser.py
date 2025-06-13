@@ -11,7 +11,9 @@ from vllm import LLM
 
 import pandas as pd
 
-import yaml
+import json
+
+import re
 
 from collections import defaultdict
 
@@ -21,7 +23,7 @@ DEFAULT_PROMPT: str = "Your task is to parse the correct answer option from an o
 
 def json_parser_str(answer:str) -> Dict[str, str]:
     try:
-        result_json = yaml.safe_load(answer)
+        result_json = json.loads(answer)
     except:
         return None
 
@@ -39,20 +41,39 @@ def json_parse_all(survey_results: List[SurveyResult]) -> Dict[LLMSurvey, pd.Dat
                 answer_format = parsed_llm_response.keys()
                 answers.append((key, value.question, *parsed_llm_response.values()))
             else:
-                answers.append((key, value, "ERROR: Parsing"))
-        df = pd.DataFrame(answers, columns=[constants.SURVEY_ITEM_ID, constants.QUESTION, *answer_format]).sort_values(by=constants.QUESTION)
+                answers.append((key, value.question, value.llm_response, "ERROR: Parsing"))
+        df = pd.DataFrame(answers, columns=[constants.SURVEY_ITEM_ID, constants.QUESTION, *answer_format])
         final_result[survey_result.survey] = df
 
     return final_result
 
-def json_parse_whole_survey_all(survey_results:List[SurveyResult], json_structure:List[str]) -> Dict[LLMSurvey, pd.DataFrame]:
+def json_parse_whole_survey_all(survey_results:List[SurveyResult]) -> Dict[LLMSurvey, pd.DataFrame]:
     parsed_results =  json_parse_all(survey_results)
     
     all_results = {}
 
     for survey, df in parsed_results.items():
+        pattern = re.compile(r"^([a-zA-Z_]+)(\d+)$")
+        matched = [pattern.match(col) for col in df.columns]
+
+        stubnames = set()
+        reshape_cols = []
+        static_cols = []
+        seen_stubs = set()
+        stubnames = []
+
+        for col, m in zip(df.columns, matched):
+            if m:
+                stub = m.group(1)
+                reshape_cols.append(col)
+                if stub not in seen_stubs:
+                    stubnames.append(stub)
+                    seen_stubs.add(stub)
+            else:
+                static_cols.append(col)
+
         long_df = pd.wide_to_long(df, 
-                                stubnames=json_structure, 
+                                stubnames=stubnames,
                                 i=[constants.SURVEY_ITEM_ID],
                                 j='new_survey_item_id', 
                                 sep='', 
