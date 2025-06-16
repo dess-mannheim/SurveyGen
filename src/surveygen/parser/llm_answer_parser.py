@@ -42,14 +42,18 @@ def json_parse_all(survey_results: List[SurveyResult]) -> Dict[LLMSurvey, pd.Dat
                 answers.append((key, value.question, *parsed_llm_response.values()))
             else:
                 answers.append((key, value.question, value.llm_response, "ERROR: Parsing"))
-        df = pd.DataFrame(answers, columns=[constants.SURVEY_ITEM_ID, constants.QUESTION, *answer_format])
+        try:
+            df = pd.DataFrame(answers, columns=[constants.SURVEY_ITEM_ID, constants.QUESTION, *answer_format])
+        except:
+            print(answers)
+            df = pd.DataFrame(answers, columns=[constants.SURVEY_ITEM_ID, constants.QUESTION, "error_col"])
         final_result[survey_result.survey] = df
 
     return final_result
 
 def json_parse_whole_survey_all(survey_results:List[SurveyResult]) -> Dict[LLMSurvey, pd.DataFrame]:
     parsed_results =  json_parse_all(survey_results)
-    
+
     all_results = {}
 
     for survey, df in parsed_results.items():
