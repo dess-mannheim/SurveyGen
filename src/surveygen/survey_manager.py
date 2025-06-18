@@ -1,10 +1,13 @@
-from typing import List, Dict, Optional, Union, Any, overload, Tuple, NamedTuple, Self, Literal
+from typing import List, Dict, Optional, Union, Any, overload, Tuple, NamedTuple, Self, Literal, Final
 from dataclasses import dataclass, replace
 from string import ascii_lowercase, ascii_uppercase
 
 from .utilities.prompt_creation import PromptCreation
 from .utilities.survey_objects import AnswerOptions, SurveyItem, QuestionLLMResponseTuple
+from .utilities import prompt_templates
 from .utilities import constants
+
+
 
 from .inference.survey_inference import batch_generation, batch_turn_by_turn_generation
 from .inference.dynamic_pydantic import generate_pydantic_model
@@ -33,6 +36,7 @@ class SurveyOptionGenerator:
     LIKERT_JUSTIFIABLE_FROM_TO: List[str] = ["Never justifiable", "Always justifiable"]
     _IDX_TYPES = Literal["char_low", "char_upper", "integer"]
 
+
     @staticmethod
     def generate_likert_options(n: int, descriptions: Optional[List[str]], # update naming of description
                                 only_from_to_scale:bool = False, 
@@ -40,6 +44,8 @@ class SurveyOptionGenerator:
                                 reversed_order:bool = False,
                                 even_order:bool = False,
                                 start_idx: int = 1,
+                                list_prompt_template: str = prompt_templates.LIST_OPTIONS_DEFAULT,
+                                scale_prompt_template: str = prompt_templates.SCALE_OPTIONS_DEFAULT,
                                 idx_type: _IDX_TYPES="integer") -> AnswerOptions:
         
         if only_from_to_scale:
@@ -86,7 +92,7 @@ class SurveyOptionGenerator:
                     answer_options.append(answer_option)
 
 
-        survey_option = AnswerOptions(answer_options, from_to_scale=only_from_to_scale)
+        survey_option = AnswerOptions(answer_options, from_to_scale=only_from_to_scale, list_prompt_template=list_prompt_template, scale_prompt_template=scale_prompt_template)
         #print(survey_option)
         return survey_option
     
