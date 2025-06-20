@@ -1,22 +1,38 @@
 from typing import List, Optional, NamedTuple, Dict
 
+from ..utilities import prompt_templates
+
 from dataclasses import dataclass
 
 class AnswerOptions:
-    answer_text: List[str] = None
-    from_to_scale: bool = False
 
-    def __init__(self, option_descriptions: List[str], from_to_scale:bool):
-        self.answer_text = option_descriptions
-        self.from_to_scale = from_to_scale
+    def __init__(self, answer_text: List[str], from_to_scale:bool, list_prompt_template:str = prompt_templates.LIST_OPTIONS_DEFAULT, scale_prompt_template:str = prompt_templates.SCALE_OPTIONS_DEFAULT):
+        """
+        Initializes the AnswerOptions object.
+
+        Args:
+            answer_text (list): A list of possible answer strings.
+            from_to_scale (bool): If True, treat answer_text as a scale [start, ..., end].
+            list_prompt_template (str): A format string for list-based options.
+                                        Must contain an '{options}' placeholder.
+            scale_prompt_template (str): A format string for scale-based options.
+                                         Must contain '{start}' and '{end}' placeholders.
+        """
+        self.answer_text:List[str] = answer_text
+        self.from_to_scale: bool = from_to_scale
+        self.list_prompt_template:str = list_prompt_template
+        self.scale_prompt_template:str = scale_prompt_template
 
     def create_options_str(self) -> str:
-        #TODO ADD a number of predefined string options. Give the user the ability to dynamically adjust them.
         if not self.from_to_scale:
-            options_prompt = f"""Options are: {', '.join(self.answer_text)}"""
+            joined_options = ', '.join(self.answer_text)
+            return self.list_prompt_template.format(options=joined_options)
         else:
-            options_prompt = f"Options range from {self.answer_text[0]} to {self.answer_text[-1]}"
-        return options_prompt
+            if len(self.answer_text) < 2:
+                return "Scale requires at least a start and end value."
+            start_option = self.answer_text[0]
+            end_option = self.answer_text[-1]
+            return self.scale_prompt_template.format(start=start_option, end=end_option)
 
 class QuestionLLMResponseTuple(NamedTuple):
     question: str
