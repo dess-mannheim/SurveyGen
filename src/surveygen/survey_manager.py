@@ -511,6 +511,7 @@ def conduct_survey_question_by_question(model: LLM, surveys: List[LLMSurvey], js
         else:
             system_messages = [inference.system_prompt for inference in current_batch]
         prompts = [inference.create_single_question(inference.order[i], task_instruction=True) for inference in current_batch]
+        questions = [inference.create_single_question(inference.order[i], task_instruction=False) for inference in current_batch]
         guided_decoding_params = [inference.guided_decodings[inference.order[i]] for inference in current_batch if inference.guided_decodings]
 
         output = batch_generation(model=model, 
@@ -522,8 +523,8 @@ def conduct_survey_question_by_question(model: LLM, surveys: List[LLMSurvey], js
                                     seed=seed,
                                     **generation_kwargs)
         
-        for survey_id, prompt, answer, item in zip(range(len(current_batch)), prompts, output, current_batch):
-            question_llm_response_pairs[survey_id].update({item.order[i]: QuestionLLMResponseTuple(prompt, answer)})
+        for survey_id, question, answer, item in zip(range(len(current_batch)), questions, output, current_batch):
+            question_llm_response_pairs[survey_id].update({item.order[i]: QuestionLLMResponseTuple(question, answer)})
         
     for i, survey in enumerate(surveys):
         survey_results.append(SurveyResult(survey, question_llm_response_pairs[i]))
@@ -633,6 +634,7 @@ def conduct_survey_in_context(model:LLM, surveys: List[LLMSurvey], json_structur
         first_question: bool = i == 0
 
         prompts = [inference.create_single_question(inference.order[i], task_instruction=first_question) for inference in current_batch]
+        questions = [inference.create_single_question(inference.order[i], task_instruction=False) for inference in current_batch]
         for c in range(len(current_surveys)):
             all_prompts[c].append(prompts[c])
 
@@ -651,8 +653,8 @@ def conduct_survey_in_context(model:LLM, surveys: List[LLMSurvey], json_structur
         if len(current_batch) == 0:
             for c in range(len(current_surveys)):
                 assistant_messages[c].append(current_assistant_messages[c])
-            for survey_id, prompt, llm_response, item in zip(range(len(current_surveys)), prompts, current_assistant_messages, current_surveys):
-                question_llm_response[survey_id].update({item._questions[i].item_id: QuestionLLMResponseTuple(prompt, llm_response)})
+            for survey_id, question, llm_response, item in zip(range(len(current_surveys)), questions, current_assistant_messages, current_surveys):
+                question_llm_response[survey_id].update({item._questions[i].item_id: QuestionLLMResponseTuple(question, llm_response)})
             continue    
         if json_structured_output:
             system_messages = [inference.json_system_prompt(json_options=json_structure) for inference in current_batch]
@@ -673,8 +675,8 @@ def conduct_survey_in_context(model:LLM, surveys: List[LLMSurvey], json_structur
         
         for num, index in enumerate(missing_indeces):
             output.insert(index, current_assistant_messages[num])
-        for survey_id, prompt, llm_response, item in zip(range(len(current_surveys)), prompts, output, current_surveys):
-            question_llm_response[survey_id].update({item._questions[i].item_id: QuestionLLMResponseTuple(prompt, llm_response)})
+        for survey_id, question, llm_response, item in zip(range(len(current_surveys)), questions, output, current_surveys):
+            question_llm_response[survey_id].update({item._questions[i].item_id: QuestionLLMResponseTuple(question, llm_response)})
 
         for o in range(len(output)):
             assistant_messages[o].append(output[o])    
