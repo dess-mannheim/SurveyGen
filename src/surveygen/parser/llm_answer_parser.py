@@ -28,7 +28,7 @@ def json_parser_str(answer:str) -> Dict[str, str]:
         result_json = json.loads(answer)
     except:
         try:
-            result_json = json_repair.loads(answer)
+            result_json = json_repair.loads(answer, skip_json_loads=True)
         except:
             return None
 
