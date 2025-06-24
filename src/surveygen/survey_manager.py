@@ -214,9 +214,12 @@ class InferenceOptions:
     full_json_structure: Optional[List[str]]
     order: List[int]
 
-    def create_single_question(self, question_id: int) -> str:
-        return f"""{self.task_instruction} 
+    def create_single_question(self, question_id: int, task_instruction:bool=False) -> str:
+        if task_instruction:
+            return f"""{self.task_instruction} 
 {self.question_prompts[question_id]}""".strip()
+        else:
+            return f"""{self.question_prompts[question_id]}"""
     
     def create_all_questions(self) -> str:
         default_prompt = f"{self.task_instruction}"
@@ -507,7 +510,7 @@ def conduct_survey_question_by_question(model: LLM, surveys: List[LLMSurvey], js
             system_messages = [inference.json_system_prompt(json_options=json_structure) for inference in current_batch]
         else:
             system_messages = [inference.system_prompt for inference in current_batch]
-        prompts = [inference.create_single_question(inference.order[i]) for inference in current_batch]
+        prompts = [inference.create_single_question(inference.order[i], task_instruction=True) for inference in current_batch]
         guided_decoding_params = [inference.guided_decodings[inference.order[i]] for inference in current_batch if inference.guided_decodings]
 
         output = batch_generation(model=model, 
@@ -564,7 +567,6 @@ def conduct_whole_survey_one_prompt(model: LLM, surveys: List[LLMSurvey], json_s
         else:
             system_messages = [inference.system_prompt for inference in current_batch]
         prompts = [inference.create_all_questions() for inference in current_batch]
-
 
         guided_decoding_params = [inference.full_guided_decoding for inference in current_batch if inference.full_guided_decoding]
 
@@ -628,7 +630,9 @@ def conduct_survey_in_context(model:LLM, surveys: List[LLMSurvey], json_structur
         current_batch = [inference_option for inference_option in inference_options if len(inference_option.order) > i]
         current_surveys = [surv for surv in surveys if len(surv._questions) > i]
 
-        prompts = [inference.create_single_question(inference.order[i]) for inference in current_batch]
+        first_question: bool = i == 0
+
+        prompts = [inference.create_single_question(inference.order[i], task_instruction=first_question) for inference in current_batch]
         for c in range(len(current_surveys)):
             all_prompts[c].append(prompts[c])
 
