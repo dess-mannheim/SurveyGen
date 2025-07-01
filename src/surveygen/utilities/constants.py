@@ -1,6 +1,5 @@
 from typing import Final
 
-
 # Survey Item
 SURVEY_ITEM_ID: Final[str] = "survey_item_id"
 SURVEY_ITEM: Final[str] = "survey_item"

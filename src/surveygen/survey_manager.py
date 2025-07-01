@@ -11,6 +11,8 @@ from typing import (
     Literal,
     Final,
 )
+from enum import Enum
+
 from dataclasses import dataclass, replace
 from string import ascii_lowercase, ascii_uppercase
 
@@ -29,6 +31,8 @@ from .inference.dynamic_pydantic import generate_pydantic_model
 
 from vllm import LLM
 from vllm.sampling_params import GuidedDecodingParams
+
+from transformers import AutoTokenizer
 
 import pandas as pd
 
@@ -303,6 +307,12 @@ class SurveyOptionGenerator:
         return survey_option
 
 
+class SurveyTypes(Enum):
+    QUESTION: Final[str] = "survey_type_question"
+    CONTEXT: Final[str] = "survey_type_context"
+    ONE_PROMPT: Final[str] = "survey_type_one_prompt"
+
+
 @dataclass
 class InferenceOptions:
     system_prompt: str
@@ -401,6 +411,29 @@ FIRST QUESTION:
 """
         return whole_prompt
 
+    def calculate_token_estimate(
+        self, model_id: str, survey_type: SurveyTypes = SurveyTypes.QUESTION
+    ) -> int:
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        if survey_type == SurveyTypes.QUESTION:
+
+            whole_prompt = f"""{self.system_prompt}
+{self.survey_instruction}{f"{chr(10)}{self._global_options.create_options_str()}" if self._global_options else ""}
+{self.generate_question_prompt(self._questions[0])}
+    """
+        elif (
+            survey_type == SurveyTypes.ONE_PROMPT or survey_type == SurveyTypes.CONTEXT
+        ):
+            questions: str = "\n".join(
+                self.generate_question_prompt(question) for question in self._questions
+            )
+            whole_prompt = f"""{self.system_prompt}
+{self.survey_instruction}{f"{chr(10)}{self._global_options.create_options_str()}" if self._global_options else ""}
+{questions}"""
+        tokens = tokenizer.encode(whole_prompt)
+
+        return len(tokens) if survey_type != SurveyTypes.CONTEXT else len(tokens) * 3
+
     def get_survey_questions(self) -> str:
         return self._questions
 
@@ -421,10 +454,22 @@ FIRST QUESTION:
 
         for _, row in df.iterrows():
             survey_item_id = row[constants.SURVEY_ITEM_ID]
-            survey_question_content = row[constants.QUESTION_CONTENT]
+            # if constants.QUESTION in df.columns:
+            #     question = row[constants.QUESTION]
+            if constants.QUESTION_CONTENT in df.columns:
+                survey_question_content = row[constants.QUESTION_CONTENT]
+            else:
+                survey_question_content = None
+
+            if constants.QUESTION_STEM in df.columns:
+                survey_question_stem = row[constants.QUESTION_STEM]
+            else:
+                survey_question_stem = None
 
             generated_survey_question = SurveyItem(
-                item_id=survey_item_id, question_content=survey_question_content
+                item_id=survey_item_id,
+                question_content=survey_question_content,
+                question_stem=survey_question_stem,
             )
             survey_questions.append(generated_survey_question)
 
@@ -435,7 +480,7 @@ FIRST QUESTION:
     @overload
     def prepare_survey(
         self,
-        question_stem: Optional[str] = "Do you see yourself as someone who...",
+        question_stem: Optional[str] = None,
         answer_options: Optional[AnswerOptions] = None,
         global_options: bool = False,
         prefilled_responses: Optional[Dict[int, str]] = None,
@@ -445,7 +490,7 @@ FIRST QUESTION:
     @overload
     def prepare_survey(
         self,
-        question_stem: Optional[List[str]] = ["Do you see yourself as someone who..."],
+        question_stem: Optional[List[str]] = None,
         answer_options: Optional[Dict[int, AnswerOptions]] = None,
         global_options: bool = False,
         prefilled_responses: Optional[Dict[int, str]] = None,
@@ -454,9 +499,7 @@ FIRST QUESTION:
 
     def prepare_survey(
         self,
-        question_stem: Optional[
-            Union[str, List[str]]
-        ] = "Do you see yourself as someone who...",
+        question_stem: Optional[Union[str, List[str]]] = None,
         answer_options: Optional[Union[AnswerOptions, Dict[int, AnswerOptions]]] = None,
         global_options: bool = False,
         prefilled_responses: Optional[Dict[int, str]] = None,
@@ -499,7 +542,11 @@ FIRST QUESTION:
             for i in range(len(survey_questions)):
                 new_survey_question = replace(
                     survey_questions[i],
-                    question_stem=question_stem,
+                    question_stem=(
+                        question_stem
+                        if question_stem
+                        else survey_questions[i].question_stem
+                    ),
                     answer_options=answer_options if not self._global_options else None,
                     prefilled_response=prefilled_responses.get(
                         survey_questions[i].item_id
@@ -511,7 +558,11 @@ FIRST QUESTION:
             for i in range(len(survey_questions)):
                 new_survey_question = replace(
                     survey_questions[i],
-                    question_stem=question_stem,
+                    question_stem=(
+                        question_stem
+                        if question_stem
+                        else survey_questions[i].question_stem
+                    ),
                     answer_options=answer_options.get(survey_questions[i].item_id),
                     prefilled_response=prefilled_responses.get(
                         survey_questions[i].item_id
@@ -523,7 +574,11 @@ FIRST QUESTION:
             for i in range(len(survey_questions)):
                 new_survey_question = replace(
                     survey_questions[i],
-                    question_stem=question_stem[i],
+                    question_stem=(
+                        question_stem[i]
+                        if question_stem
+                        else survey_questions[i].question_stem
+                    ),
                     answer_options=answer_options if not self._global_options else None,
                     prefilled_response=prefilled_responses.get(
                         survey_questions[i].item_id
@@ -534,7 +589,11 @@ FIRST QUESTION:
             for i in range(len(survey_questions)):
                 new_survey_question = replace(
                     survey_questions[i],
-                    question_stem=question_stem[i],
+                    question_stem=(
+                        question_stem[i]
+                        if question_stem
+                        else survey_questions[i].question_stem
+                    ),
                     answer_options=answer_options.get(survey_questions[i].item_id),
                     prefilled_response=prefilled_responses.get(
                         survey_questions[i].item_id
@@ -680,7 +739,7 @@ class SurveyResult:
 
 def conduct_survey_question_by_question(
     model: LLM,
-    surveys: List[LLMSurvey],
+    surveys: Union[LLMSurvey, List[LLMSurvey]],
     json_structured_output: bool = False,
     json_structure: List[str] = DEFAULT_JSON_STRUCTURE,
     print_conversation: bool = False,
@@ -701,6 +760,9 @@ def conduct_survey_question_by_question(
     :param generation_kwargs: All keywords needed for SamplingParams.
     :return: Generated text by the LLM in double list format
     """
+    if isinstance(surveys, LLMSurvey):
+        surveys = [surveys]
+
     inference_options: List[InferenceOptions] = []
 
     max_survey_length: int = 0
