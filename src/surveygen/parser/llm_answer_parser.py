@@ -13,6 +13,8 @@ import pandas as pd
 
 import json
 
+import json_repair
+
 import re
 
 from collections import defaultdict
@@ -25,7 +27,10 @@ def json_parser_str(answer:str) -> Dict[str, str]:
     try:
         result_json = json.loads(answer)
     except:
-        return None
+        try:
+            result_json = json_repair.loads(answer, skip_json_loads=True)
+        except:
+            return None
 
     return result_json
 
@@ -57,6 +62,11 @@ def json_parse_whole_survey_all(survey_results:List[SurveyResult]) -> Dict[LLMSu
     all_results = {}
 
     for survey, df in parsed_results.items():
+
+        if "error_col" in df.columns:
+            all_results[survey] = df
+            continue
+
         pattern = re.compile(r"^([a-zA-Z_]+)(\d+)$")
         matched = [pattern.match(col) for col in df.columns]
 
