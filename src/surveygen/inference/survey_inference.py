@@ -109,7 +109,7 @@ def _create_sampling_params(batch_size: int, seeds: List[int],
     sampling_params_list = [
                 SamplingParams(
                     seed=seeds[i],
-                    guided_decoding=global_guided_decoding,
+                    guided_decoding=guided_decodings[i],
                     **generation_kwargs,
                 )
                 for i in range(batch_size)

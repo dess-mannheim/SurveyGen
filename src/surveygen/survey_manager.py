@@ -923,18 +923,21 @@ def conduct_whole_survey_one_prompt(
 
         if json_structured_output:
             all_json_structures = []
+            all_constraints = []
             for inference_option in current_batch:
                 full_json_structure = []
-                full_constraints = []
+                full_constraints = {}
                 for i in range(len(inference_option.answer_options)):
                     for json_element in json_structure:
                         new_element = f"{json_element}{i}"
-                        new_constraints = {}
                         if constraints:
-                            if constraints[json_element] == constants.OPTIONS_ADJUST:
-                                new_constraints[new_element] = inference_option.answer_options[i].answer_text
-                        full_constraints.append(new_constraints)
+                            constraints_element = constraints.get(json_element)
+                            if constraints_element == constants.OPTIONS_ADJUST:
+                                full_constraints[new_element] = inference_option.answer_options[i].answer_text
+                            elif constraints_element != None:
+                                full_constraints[new_element] = constraints_element
                         full_json_structure.append(new_element)
+                all_constraints.append(full_constraints)
                 all_json_structures.append(full_json_structure)
                     
             system_messages = [
@@ -946,14 +949,13 @@ def conduct_whole_survey_one_prompt(
             system_messages = [inference.system_prompt for inference in current_batch]
         prompts = [inference.create_all_questions() for inference in current_batch]
 
-
         output = batch_generation(
             model=model,
             system_messages=system_messages,
             prompts=prompts,
             guided_decoding_options= "json" if json_structured_output else None,
-            json_fields=full_json_structure,
-            constraints=full_constraints if constraints else None,
+            json_fields=all_json_structures,
+            constraints=all_constraints if constraints else None,
             client_model_name=client_model_name,
             api_concurrency=api_concurrency,
             print_conversation=print_conversation,
