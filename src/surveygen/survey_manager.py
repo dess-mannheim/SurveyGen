@@ -22,7 +22,9 @@ from .utilities.survey_objects import (
 )
 from .utilities import prompt_templates
 from .utilities import constants
+from .utilities import utils
 
+from .parser.llm_answer_parser import raw_responses
 
 from .inference.survey_inference import batch_generation, batch_turn_by_turn_generation
 from .inference.dynamic_pydantic import generate_pydantic_model
@@ -33,6 +35,9 @@ from vllm.sampling_params import GuidedDecodingParams
 from openai import AsyncOpenAI
 
 from transformers import AutoTokenizer
+
+from pathlib import Path
+import os
 
 import pandas as pd
 
@@ -764,6 +769,8 @@ def conduct_survey_question_by_question(
     api_concurrency: int = 10,
     print_conversation: bool = False,
     print_progress: bool = True,
+    n_save_step: Optional[int] = None,
+    intermediate_save_file: Optional[str] = None,
     seed: int = 42,
     **generation_kwargs: Any,
 ) -> List[SurveyResult]:
@@ -780,6 +787,8 @@ def conduct_survey_question_by_question(
     :param generation_kwargs: All keywords needed for SamplingParams.
     :return: Generated text by the LLM in double list format
     """
+    _intermediate_save_path_check(n_save_step, intermediate_save_file)
+
     if isinstance(interviews, LLMInterview):
         interviews = [interviews]
 
@@ -858,10 +867,44 @@ def conduct_survey_question_by_question(
                 {item.order[i]: QuestionLLMResponseTuple(question, answer)}
             )
 
+        _intermediate_saves(interviews, n_save_step, intermediate_save_file, question_llm_response_pairs, i)
+
     for i, survey in enumerate(interviews):
         survey_results.append(SurveyResult(survey, question_llm_response_pairs[i]))
 
     return survey_results
+
+def _intermediate_saves(interviews: List[LLMInterview], n_save_step: int, intermediate_save_file: str, question_llm_response_pairs: QuestionLLMResponseTuple, i: int):
+    if n_save_step:
+        if i % n_save_step == 0:
+            intermediate_survey_results: List[SurveyResult] = []
+            for j, interview in enumerate(interviews):
+                intermediate_survey_results.append(SurveyResult(interview, question_llm_response_pairs[j]))
+            parsed_results = raw_responses(intermediate_survey_results)
+            utils.create_one_dataframe(parsed_results).to_csv(intermediate_save_file)
+
+def _intermediate_save_path_check(n_save_step:int, intermediate_save_path:str):
+    if n_save_step:
+        if not isinstance(n_save_step, int) or n_save_step <= 0:
+            raise ValueError("`n_save_step` must be a positive integer.")
+
+        if not intermediate_save_path:
+            raise ValueError("`intermediate_save_file` must be provided if saving is enabled.")
+        
+        if not intermediate_save_path.endswith(".csv"):
+            raise ValueError("`intermediate_save_file` should be a .csv file.")
+        
+        # Ensure it's a directory that exists or can be created
+        parent_dir = Path(intermediate_save_path).parent
+        if not parent_dir.exists():
+            try:
+                parent_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                raise ValueError(f"Invalid intermediate save path: {intermediate_save_path}. Error: {e}")
+
+        # Optional: Check it's writable
+        if not os.access(parent_dir, os.W_OK):
+            raise ValueError(f"Save path '{intermediate_save_path}' is not writable.")
 
 
 def conduct_whole_survey_one_prompt(
@@ -872,6 +915,8 @@ def conduct_whole_survey_one_prompt(
     constraints: Optional[Dict[str, List[str]]] = DEFAULT_CONSTRAINTS,
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
+    n_save_step: Optional[int] = None,
+    intermediate_save_file: Optional[str] = None,
     print_conversation: bool = False,
     print_progress: bool = True,
     seed: int = 42,
@@ -890,6 +935,8 @@ def conduct_whole_survey_one_prompt(
     :param generation_kwargs: All keywords needed for SamplingParams.
     :return: Generated text by the LLM in double list format
     """
+    _intermediate_save_path_check(n_save_step, intermediate_save_file)
+
     if isinstance(interviews, LLMInterview):
         interviews = [interviews]
     inference_options: List[InferenceOptions] = []
@@ -969,6 +1016,8 @@ def conduct_whole_survey_one_prompt(
             question_llm_response_pairs[survey_id].update(
                 {-1: QuestionLLMResponseTuple(prompt, answer)}
             )
+        
+        _intermediate_saves(interviews, n_save_step, intermediate_save_file, question_llm_response_pairs, i)
 
     for i, survey in enumerate(interviews):
         survey_results.append(SurveyResult(survey, question_llm_response_pairs[i]))
@@ -986,6 +1035,8 @@ def conduct_survey_in_context(
     api_concurrency: int = 10,
     print_conversation: bool = False,
     print_progress: bool = True,
+    n_save_step: Optional[int] = None,
+    intermediate_save_file: Optional[str] = None,
     seed: int = 42,
     **generation_kwargs: Any,
 ) -> List[SurveyResult]:
@@ -1002,6 +1053,7 @@ def conduct_survey_in_context(
     :param generation_kwargs: All keywords needed for SamplingParams.
     :return: Generated text by the LLM in double list format
     """
+    _intermediate_save_path_check(n_save_step, intermediate_save_file)
     if isinstance(interviews, LLMInterview):
         interviews = [interviews]
 
@@ -1134,6 +1186,8 @@ def conduct_survey_in_context(
         for o in range(len(output)):
             assistant_messages[o].append(output[o])
         # assistant_messages.append(output)
+
+        _intermediate_saves(interviews, n_save_step, intermediate_save_file, question_llm_response, i)
 
     for i, survey in enumerate(interviews):
         survey_results.append(SurveyResult(survey, question_llm_response[i]))
