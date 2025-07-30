@@ -1,42 +1,3 @@
-from typing import (
-    List,
-    Dict,
-    Optional,
-    Union,
-    Any,
-    overload,
-    Literal,
-)
-from string import ascii_lowercase, ascii_uppercase
-
-from .utilities.prompt_creation import PromptCreation
-from .utilities.survey_objects import (
-    AnswerOptions,
-    QuestionLLMResponseTuple,
-)
-from .utilities import prompt_templates
-from .utilities import constants
-from .utilities import utils
-
-from .parser.llm_answer_parser import raw_responses
-
-from .inference.survey_inference import batch_generation, batch_turn_by_turn_generation, StructuredOutputOptions
-
-from .llm_interview import LLMInterview
-
-from .utilities.survey_objects import AnswerOptions, InferenceOptions, InterviewResult
-
-from vllm import LLM
-
-from openai import AsyncOpenAI
-
-from pathlib import Path
-import os
-
-import random
-
-import tqdm
-
 """
 Module for managing and conducting surveys using LLM models.
 
@@ -69,6 +30,44 @@ for result in results:
     raw_responses = raw_responses(survey_answers)
 ```
 """
+
+from typing import (
+    List,
+    Dict,
+    Optional,
+    Union,
+    Any,
+    overload,
+    Literal,
+)
+from string import ascii_lowercase, ascii_uppercase
+
+from .utilities.survey_objects import (
+    AnswerOptions,
+    QuestionLLMResponseTuple,
+)
+from .utilities import prompt_templates
+from .utilities import constants
+from .utilities import utils
+
+from .parser.llm_answer_parser import raw_responses
+
+from .inference.survey_inference import batch_generation, batch_turn_by_turn_generation, StructuredOutputOptions
+
+from .llm_interview import LLMInterview
+
+from .utilities.survey_objects import AnswerOptions, InferenceOptions, InterviewResult
+
+from vllm import LLM
+
+from openai import AsyncOpenAI
+
+from pathlib import Path
+import os
+
+import random
+
+import tqdm
 
 
 class SurveyOptionGenerator:
@@ -459,6 +458,16 @@ def conduct_survey_question_by_question(
     return survey_results
 
 def _intermediate_saves(interviews: List[LLMInterview], n_save_step: int, intermediate_save_file: str, question_llm_response_pairs: QuestionLLMResponseTuple, i: int):
+    """
+    Internal helper to save intermediate survey results.
+
+    Args:
+        interviews: List of interviews being conducted.
+        n_save_step: Save frequency in steps.
+        intermediate_save_file: Path to save file.
+        question_llm_response_pairs: Current responses.
+        i: Current step number.
+    """
     if n_save_step:
         if i % n_save_step == 0:
             intermediate_survey_results: List[InterviewResult] = []
@@ -468,6 +477,13 @@ def _intermediate_saves(interviews: List[LLMInterview], n_save_step: int, interm
             utils.create_one_dataframe(parsed_results).to_csv(intermediate_save_file)
 
 def _intermediate_save_path_check(n_save_step:int, intermediate_save_path:str):
+    """
+    Internal helper to validate intermediate save path.
+
+    Args:
+        n_save_step: Save frequency in steps.
+        intermediate_save_path: Path to check.
+    """
     if n_save_step:
         if not isinstance(n_save_step, int) or n_save_step <= 0:
             raise ValueError("`n_save_step` must be a positive integer.")
@@ -631,17 +647,23 @@ def conduct_survey_in_context(
     **generation_kwargs: Any,
 ) -> List[InterviewResult]:
     """
-    Conducts the entire survey multiple prompts but within the same context window.
+    Conducts surveys using in-context learning approach.
 
-    :param model: LLM instance of vllm.
-    :param system_prompt: The system prompt of the model.
-    :param task_instruction: The task instructio the model will be prompted with.
-    :param json_structured_output: If json_structured output should be used.
-    :param json_structure: The structure the final ouput should have.
-    :param batch_size: How many inferences should run in parallel.
-    :param print_conversation: If True, the whole conversation will be printed.
-    :param generation_kwargs: All keywords needed for SamplingParams.
-    :return: Generated text by the LLM in double list format
+    Args:
+        model: LLM instance or AsyncOpenAI client.
+        interviews: Single interview or list of interviews to conduct.
+        structured_output_options: Options for structured output format.
+        client_model_name: Name of model when using OpenAI client.
+        api_concurrency: Number of concurrent API requests.
+        print_conversation: If True, prints the conversation.
+        print_progress: If True, shows progress bar.
+        n_save_step: Save intermediate results every n steps.
+        intermediate_save_file: Path to save intermediate results.
+        seed: Random seed for reproducibility.
+        **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or  client.chat.completions.create().
+
+    Returns:
+        List[InterviewResult]: Results for each interview.
     """
     _intermediate_save_path_check(n_save_step, intermediate_save_file)
     if isinstance(interviews, LLMInterview):
