@@ -37,6 +37,39 @@ import random
 
 import tqdm
 
+"""
+Module for managing and conducting surveys using LLM models.
+
+This module provides functions to conduct surveys in different ways:
+- Question by question
+- Whole survey in one prompt 
+- In-context learning
+
+Usage example:
+-------------
+```python
+from surveygen import LLMInterview, conduct_survey_question_by_question
+from surveygen.parser.llm_answer_parser import raw_responses
+from vllm import LLM
+
+# Initialize model and interview
+model = LLM(model="meta-llama/Meta-Llama-3-8B-Instruct")
+interview = LLMInterview(interview_path="questions.csv")
+interview.prepare_interview(question_stem="How do you feel towards QUESTION_CONTENT_PLACEHOLDER?")
+
+# Conduct survey
+results = conduct_survey_question_by_question(
+    model=model,
+    interviews=interview,
+    print_progress=True
+)
+
+# Access results
+for result in results:
+    raw_responses = raw_responses(survey_answers)
+```
+"""
+
 
 class SurveyOptionGenerator:
     """
@@ -316,18 +349,25 @@ def conduct_survey_question_by_question(
     **generation_kwargs: Any,
 ) -> List[InterviewResult]:
     """
-    Conducts the survey with each question in a new context.
+    Conducts a survey by asking questions one at a time.
 
-    :param model: LLM instance of vllm.
-    :param system_prompt: The system prompt of the model.
-    :param task_instruction: The task instructio the model will be prompted with.
-    :param json_structured_output: If json_structured output should be used.
-    :param json_structure: The structure the final ouput should have.
-    :param batch_size: How many inferences should run in parallel.
-    :param print_conversation: If True, the whole conversation will be printed.
-    :param generation_kwargs: All keywords needed for SamplingParams.
-    :return: Generated text by the LLM in double list format
+    Args:
+        model: LLM instance or AsyncOpenAI client.
+        interviews: Single interview or list of interviews to conduct as a survey.
+        structured_output_options: Options for structured output format.
+        client_model_name: Name of model when using OpenAI client.
+        api_concurrency: Number of concurrent API requests.
+        print_conversation: If True, prints all conversations.
+        print_progress: If True, shows progress bar.
+        n_save_step: Save intermediate results every n steps.
+        intermediate_save_file: Path to save intermediate results.
+        seed: Random seed for reproducibility.
+        **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or  client.chat.completions.create().
+
+    Returns:
+        List[InterviewResult]: Results for each interview.
     """
+
     _intermediate_save_path_check(n_save_step, intermediate_save_file)
 
     if isinstance(interviews, LLMInterview):
@@ -467,15 +507,21 @@ def conduct_whole_survey_one_prompt(
     """
     Conducts the entire survey in one single LLM prompt.
 
-    :param model: LLM instance of vllm.
-    :param system_prompt: The system prompt of the model.
-    :param task_instruction: The task instructio the model will be prompted with.
-    :param json_structured_output: If json_structured output should be used.
-    :param json_structure: The structure the final ouput should have.
-    :param batch_size: How many inferences should run in parallel.
-    :param print_conversation: If True, the whole conversation will be printed.
-    :param generation_kwargs: All keywords needed for SamplingParams.
-    :return: Generated text by the LLM in double list format
+    Args:
+        model: LLM instance or AsyncOpenAI client.
+        interviews: Single interview or list of interviews to conduct.
+        structured_output_options: Options for structured output format.
+        client_model_name: Name of model when using OpenAI client.
+        api_concurrency: Number of concurrent API requests.
+        n_save_step: Save intermediate results every n steps.
+        intermediate_save_file: Path to save intermediate results.
+        print_conversation: If True, prints the conversation.
+        print_progress: If True, shows progress bar.
+        seed: Random seed for reproducibility.
+        **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or  client.chat.completions.create().
+
+    Returns:
+        List[InterviewResult]: Results for each interview.
     """
     _intermediate_save_path_check(n_save_step, intermediate_save_file)
 

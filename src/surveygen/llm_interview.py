@@ -28,7 +28,19 @@ from transformers import AutoTokenizer
 
 class LLMInterview:
     """
-    A class responsible for preparing and conducting surveys on LLMs.
+    Main class for setting up and managing an LLM-based interview or survey.
+
+    This class handles loading questions, preparing prompts, managing answer options,
+    and generating prompt structures for different interview types.
+
+    Usage example:
+    --------------
+    ```python
+    interview = LLMInterview(interview_path="questions.csv")
+    interview.prepare_interview(question_stem="Do you thing QUESTION_CONTENT_PLACEHOLDER is good?", answer_options=AnswerOptions(...))
+    prompt = interview.get_prompt_structure()
+    print(prompt)
+    ```
     """
 
     DEFAULT_INTERVIEW_ID: str = "Interview"
@@ -49,6 +61,17 @@ class LLMInterview:
         verbose=False,
         seed: int = 42,
     ):
+        """
+        Initialize an LLMInterview instance.
+
+        Args:
+            interview_path (str): Path to the CSV file containing the interview structure and questions.
+            interview_name (str): Name/ID for the interview.
+            system_prompt (str): System prompt to prepend to all questions.
+            interview_instruction (str): Instructions that will be given to the model before asking the questions.
+            verbose (bool): If True, enables verbose output.
+            seed (int): Random seed for reproducibility.
+        """
         random.seed(seed)
         self.load_interview_format(interview_path=interview_path)
         self.verbose: bool = verbose
@@ -61,9 +84,21 @@ class LLMInterview:
         self._global_options: AnswerOptions = None
 
     def duplicate(self):
+        """
+        Create a deep copy of the current interview instance.
+
+        Returns:
+            LLMInterview: A deep copy of the current object.
+        """
         return copy.deepcopy(self)
 
     def get_prompt_structure(self) -> str:
+        """
+        Generate a prompt structure for the first question, including system prompt and instructions.
+
+        Returns:
+            str: The full prompt as a string.
+        """
         parts = [
             "SYSTEM PROMPT:",
             self.system_prompt,
@@ -76,10 +111,21 @@ class LLMInterview:
 
         parts.append("FIRST QUESTION:")
         parts.append(self.generate_question_prompt(self._questions[0]))
-        
+
         return "\n".join(parts)
 
-    def get_prompt_for_interview_type(self, interview_type: InterviewType = InterviewType.QUESTION):
+    def get_prompt_for_interview_type(
+        self, interview_type: InterviewType = InterviewType.QUESTION
+    ):
+        """
+        Generate the full prompt for a given interview type.
+
+        Args:
+            interview_type (InterviewType): The type of interview prompt to generate.
+
+        Returns:
+            str: The constructed prompt for the interview type.
+        """
         parts = [self.system_prompt, self.interview_instruction]
 
         if self._global_options:
@@ -87,7 +133,7 @@ class LLMInterview:
 
         if interview_type == InterviewType.QUESTION:
             parts.append(self.generate_question_prompt(self._questions[0]))
-            
+
         elif interview_type in (InterviewType.ONE_PROMPT, InterviewType.CONTEXT):
             # Use extend to add all question strings from the generator
             parts.extend(
@@ -103,13 +149,16 @@ class LLMInterview:
         self, model_id: str, interview_type: InterviewType = InterviewType.QUESTION
     ) -> int:
         """
-        Calculates the input token estimate for different survey types. Remember that the model needs to
-        have enough context length to also fit the output tokens. For SurveyType.CONTEXT the total input token estimate
-        is just a very rough estimation. It depends on how many tokens the model produces in each response.
+        Estimate the number of input tokens for the prompt, given a model and interview type.
+        Remember that the model also has to have enough context length to fit its own response 
+        in case of CONTEXT and ONE_PROMPT type.
 
-        :param model_id: The huggingface model id of the model you want to use.
-        :param survey_type: The survey type you will be running.
-        :return: Estimated number of input tokens needed for the survey
+        Args:
+            model_id (str): Huggingface model id.
+            interview_type (InterviewType): Type of interview prompt.
+
+        Returns:
+            int: Estimated number of input tokens.
         """
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         whole_prompt = self.get_prompt_for_interview_type(interview_type=interview_type)
@@ -120,18 +169,26 @@ class LLMInterview:
         )
 
     def get_survey_questions(self) -> str:
+        """
+        Get the list of loaded interview questions.
+
+        Returns:
+            List[InterviewItem]: The loaded questions.
+        """
         return self._questions
 
     def load_interview_format(self, interview_path: str) -> Self:
         """
-        Loads a prepared survey in csv format from a path.
+        Load interview questions from a CSV file.
 
-        Currently csv files need to have the structure:
-        question_id, survey_question
-        1, question1
+        The CSV should have columns: interview_item_id, question_content
+        Optionally it can also have question_stem.
 
-        :param survey_path: Path to the survey to load.
-        :return: List of Survey Questions
+        Args:
+            interview_path (str): Path to the CSV file.
+
+        Returns:
+            Self: The updated instance with loaded questions.
         """
         interview_questions: List[InterviewItem] = []
 
@@ -191,12 +248,18 @@ class LLMInterview:
         randomized_item_order: bool = False,
     ) -> Self:
         """
-        Prepares a survey with additional prompts for each question, answer options and prefilled answers.
+        Prepare the interview by assigning question stems, answer options, and prefilled responses.
 
-        :param prompt: Either one prompt for each question, or a list of different questions. Needs to have the same amount of prompts as the survey questions.
-        :param options: Either the same Survey Options for all questions, or a dictionary linking the question id to the desired survey options.
-        :para, prefilled_answers Linking survey question id to a prefilled answer.
-        :return: List of updated Survey Questions
+        Args:
+            question_stem (str or List[str], optional): Single or list of question stems.
+            answer_options (AnswerOptions or Dict[int, AnswerOptions], optional): Answer options for all or per question.
+            global_options (bool): If True, the answer options will be specified once at the end of the task instructions. Otherwise, they will be specified once per question.
+            prefilled_responses (Dict[int, str], optional): If you provide prefilled responses, they will be used 
+            to fill the answers instead of prompting the LLM for that question.
+            randomized_item_order (bool): If True, randomize the order of questions.
+
+        Returns:
+            Self: The updated instance with prepared questions.
         """
         interview_questions: List[InterviewItem] = self._questions
 
@@ -294,10 +357,13 @@ class LLMInterview:
 
     def generate_question_prompt(self, interview_question: InterviewItem) -> str:
         """
-        Returns the string of how a survey question would be prompted to the model.
+        Generate the prompt string for a single interview question.
 
-        :param survey_question: Survey question to prompt.
-        :return: Prompt that will be given to the model for this question.
+        Args:
+            interview_question (InterviewItem): The question to prompt.
+
+        Returns:
+            str: The formatted prompt for the question.
         """
         if constants.QUESTION_CONTENT_PLACEHOLDER in interview_question.question_stem:
             question_prompt = interview_question.question_stem.format(
@@ -317,10 +383,13 @@ class LLMInterview:
 
     def _generate_inference_options(
         self,
-        # json_structured_output: bool = False,
-        # json_structure: List[str] = DEFAULT_JSON_STRUCTURE,
-        # json_force_answer: bool = False,
     ):
+        """
+        Internal method to generate inference options for the interview.
+
+        Returns:
+            InferenceOptions: Object containing prompts, answer options, and order.
+        """
         interview_questions = self._questions
 
         default_prompt = f"""{self.interview_instruction}"""
@@ -402,10 +471,6 @@ class LLMInterview:
             system_prompt=self.system_prompt,
             task_instruction=default_prompt,
             question_prompts=question_prompts,
-            # guided_decoding_params,
-            # full_guided_decoding_params,
-            # json_list,
-            # extended_json_structure,
             answer_options=answer_options,
             order=order,
         )
