@@ -412,7 +412,7 @@ def conduct_survey_question_by_question(
         ]
 
         if structured_output_options:
-            if structured_output_options.category == "json":
+            if structured_output_options.category == "json" and structured_output_options.automatic_system_prompt:
                 system_messages = [
                     inference.json_system_prompt(json_options=structured_output_options.json_fields)
                     for inference in current_batch
@@ -592,11 +592,13 @@ def conduct_whole_survey_one_prompt(
                     all_json_structures.append(full_json_structure)
                 structured_output_options.constraints = all_constraints[0]
                 structured_output_options.json_fields = all_json_structures[0]
-
-                system_messages = [
-                    inference.json_system_prompt(all_json_structures[num])
-                    for num, inference in enumerate(current_batch)
-                ]
+                if structured_output_options.automatic_system_prompt:
+                    system_messages = [
+                        inference.json_system_prompt(all_json_structures[num])
+                        for num, inference in enumerate(current_batch)
+                    ]
+                else:
+                    system_messages = [inference.system_prompt for inference in current_batch]
             elif structured_output_options.category == "choice":
                 if structured_output_options.allowed_choices == constants.OPTIONS_ADJUST:
                     structured_output_options.allowed_choices = inference_option.answer_options[0].answer_text
@@ -762,7 +764,7 @@ def conduct_survey_in_context(
                 )
             continue
         if structured_output_options:
-            if structured_output_options.category == "json":
+            if structured_output_options.category == "json" and structured_output_options.automatic_system_prompt:
                 system_messages = [
                     inference.json_system_prompt(json_options=structured_output_options.json_fields)
                     for inference in current_batch

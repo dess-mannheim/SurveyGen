@@ -25,13 +25,48 @@ from dataclasses import dataclass
 
 @dataclass
 class StructuredOutputOptions:
+    """
+    Configuration for structured output generation.
+
+    Attributes:
+        category: Type of structured output ("choice" or "json")
+        json_fields: List of field names for JSON output
+        constraints: Optional constraints for field values
+        allowed_choices: List of allowed choices for choice output
+        automatic_system_prompt: If a instruction to only output in the required json format should be added to the system prompt
+    """
+
     category: Literal["choice", "json"]
     json_fields: Optional[List[str]] = None
     constraints: Optional[Dict[str, List[str]]] = None
     allowed_choices: Optional[List[str]] = None
+    automatic_system_prompt: bool = False
+    
+    def __post_init__(self):
+        """Perform validation after the object has been initialized."""
+        if self.category == "json" and self.json_fields is None:
+            raise ValueError(
+                "`json_fields` must be provided when category is 'json'"
+            )
+        
+        if self.category == "choice" and self.allowed_choices is None:
+            raise ValueError(
+                "`allowed_choices` must be provided when category is 'choice'"
+            )
 
 
 def default_model_init(model_id: str, seed: int = 42, **model_keywords) -> LLM:
+    """
+    Initialize a vLLM model with default settings.
+
+    Args:
+        model_id: HuggingFace model identifier
+        seed: Random seed for reproducibility
+        **model_keywords: Additional keywords passed to LLM constructor
+
+    Returns:
+        LLM: Initialized vLLM model instance
+    """
     random.seed(seed)
     torch.manual_seed(seed)
     print("Device_count: " + str(torch.cuda.device_count()))
@@ -45,6 +80,16 @@ def default_model_init(model_id: str, seed: int = 42, **model_keywords) -> LLM:
 
 
 def _generate_seeds(seed: int, batch_size: int) -> List[int]:
+    """
+    Generate a list of random seeds.
+
+    Args:
+        seed: Base random seed
+        batch_size: Number of seeds to generate
+
+    Returns:
+        List[int]: Generated random seeds
+    """
     rng = np.random.default_rng(seed)
     return rng.integers(low=0, high=2**32, size=batch_size).tolist()
 
@@ -64,6 +109,30 @@ def batch_generation(
     print_progress: bool = True,
     **generation_kwargs: Any,
 ):
+    """
+    Generate responses for a batch of prompts.
+
+    Handles both vLLM and OpenAI API generation with support for:
+    - Structured output (JSON or choice format)
+    - Conversation printing
+    - Progress tracking
+    - Concurrent API requests
+
+    Args:
+        model: vLLM model or AsyncOpenAI client
+        system_messages: System prompts for each conversation
+        prompts: User prompts to generate responses for
+        structured_output_options: Configuration for structured output
+        seed: Random seed for reproducibility
+        client_model_name: Model name when using OpenAI API
+        api_concurrency: Max concurrent API requests
+        print_conversation: If True, prints conversations
+        print_progress: If True, shows progress bar
+        **generation_kwargs: Additional generation parameters
+
+    Returns:
+        List[str]: Generated responses
+    """
     random.seed(seed)
 
     # Prepare batch of messages
@@ -128,6 +197,20 @@ def _create_sampling_params(
     use_vllm: bool = True,
     **generation_kwargs: Any,
 ) -> Union[List[SamplingParams], Dict[str, Any]]:
+    """
+    Create sampling parameters for generation.
+
+    Args:
+        batch_size: Number of prompts in batch
+        seeds: Random seeds for generation
+        structured_output_options: Output structure configuration
+        use_vllm: If True, creates vLLM parameters
+        **generation_kwargs: Additional sampling parameters
+
+    Returns:
+        Sampling parameters for vLLM or API configuration
+    """
+
     if structured_output_options:
         sampling_params_list = _structured_sampling_params(
             batch_size=batch_size,
@@ -142,7 +225,7 @@ def _create_sampling_params(
                 SamplingParams(seed=seeds[i], **generation_kwargs)
                 for i in range(batch_size)
             ]
-        else: 
+        else:
             return []
     return sampling_params_list
 
@@ -243,6 +326,33 @@ def batch_turn_by_turn_generation(
     print_progress: bool = True,
     **generation_kwargs,
 ) -> List[str]:
+    """
+    Generate responses for multi-turn conversations.
+
+    Handles conversations with multiple back-and-forth exchanges between
+    user and assistant. Supports:
+    - Structured output formats
+    - Pre-filled assistant messages
+    - Conversation printing
+    - Progress tracking
+
+    Args:
+        model: vLLM model or AsyncOpenAI client
+        system_messages: System prompts for each conversation
+        prompts: Lists of user messages for each conversation
+        assistant_messages: Optional pre-filled assistant responses
+        structured_output_options: Output structure configuration
+        seed: Random seed for reproducibility
+        client_model_name: Model name for OpenAI API
+        api_concurrency: Max concurrent API requests
+        print_conversation: If True, prints conversations
+        print_progress: If True, shows progress bar
+        **generation_kwargs: Additional generation parameters
+
+    Returns:
+        List[str]: Generated responses for each conversation
+    """
+
     random.seed(seed)
     batch_messages = []
     batch_size = len(system_messages)
@@ -336,7 +446,6 @@ def _run_async_in_thread(
         **generation_kwargs,
     )
 
-
     def thread_target():
         try:
             res = asyncio.run(
@@ -403,9 +512,7 @@ async def _run_api_batch_async(
                         },
                     }
                 elif structured_output_options.category == "choice":
-                    request_kwargs["extra_body"] = {
-                        "guided_choice": structured_output
-                        }
+                    request_kwargs["extra_body"] = {"guided_choice": structured_output}
 
             return await client.chat.completions.create(**request_kwargs)
 
