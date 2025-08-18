@@ -22,6 +22,8 @@ import random
 
 from dataclasses import dataclass
 
+from tqdm.auto import tqdm
+
 
 @dataclass
 class StructuredOutputOptions:
@@ -178,7 +180,7 @@ def batch_generation(
         conversation_print = "Conversation:"
         for system_message, prompt, answer in zip(system_messages, prompts, result):
             round_print = f"{conversation_print}\nSystem Message:\n{system_message}\nUser Message:\n{prompt}\nGenerated Message\n{answer}"
-            print(round_print, flush=True)
+            tqdm.write(round_print)
             break
 
     return result
@@ -419,7 +421,7 @@ def batch_turn_by_turn_generation(
                             f"{round_print}\nAssistant Message:\n{assistant_list[j]}"
                         )
             round_print = f"{round_print}\nGenerated Answer:\n{answer}"
-            print(round_print, flush=True)
+            tqdm.write(round_print)
             break
 
     return result

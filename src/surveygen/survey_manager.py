@@ -67,7 +67,7 @@ import os
 
 import random
 
-import tqdm
+from tqdm.auto import tqdm
 
 
 class SurveyOptionGenerator:
@@ -401,7 +401,7 @@ def conduct_survey_question_by_question(
             structured_output_options.allowed_choices = inference_options[0].answer_options[0].answer_text
 
     for i in (
-        tqdm.tqdm(range(max_survey_length))
+        tqdm(range(max_survey_length), desc='Processing interviews')
         if print_progress
         else range(max_survey_length)
     ):
@@ -561,7 +561,7 @@ def conduct_whole_survey_one_prompt(
     survey_results: List[InterviewResult] = []
 
     for i in (
-        tqdm.tqdm(range(max_survey_length))
+        tqdm(range(max_survey_length), desc='Processing interviews')
         if print_progress
         else range(max_survey_length)
     ):
@@ -706,7 +706,7 @@ def conduct_survey_in_context(
         all_prompts.append([])
 
     for i in (
-        tqdm.tqdm(range(max_survey_length))
+        tqdm(range(max_survey_length), desc='Processing interviews')
         if print_progress
         else range(max_survey_length)
     ):
