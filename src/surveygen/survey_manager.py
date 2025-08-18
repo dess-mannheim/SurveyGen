@@ -16,7 +16,7 @@ from vllm import LLM
 # Initialize model and interview
 model = LLM(model="meta-llama/Meta-Llama-3-8B-Instruct")
 interview = LLMInterview(interview_path="questions.csv")
-interview.prepare_interview(question_stem="How do you feel towards QUESTION_CONTENT_PLACEHOLDER?")
+interview.prepare_interview(question_stem="How do you feel towards {QUESTION_CONTENT_PLACEHOLDER}?")
 
 # Conduct survey
 results = conduct_survey_question_by_question(

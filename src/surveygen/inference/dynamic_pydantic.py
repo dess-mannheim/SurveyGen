@@ -1,4 +1,5 @@
 from typing import List, Dict, Any
+import warnings
 from pydantic import BaseModel, create_model
 from enum import Enum
 
@@ -11,6 +12,13 @@ def generate_pydantic_model(
     fields: List[str], constraints: Dict[str, List[str]]
 ) -> BaseModel:
     model_fields = {}
+
+    difference = set(constraints.keys())- set(fields)
+    if len(difference) > 0:
+        warnings.warn(f"Constraints specified for non-existing fields: {difference}. " + 
+                       "Constraints should be provided in the format {'a JSON field': ['option 1',...]}.",
+                       RuntimeWarning, stacklevel=2)
+
     for field in fields:
         if field in constraints:
             enum_type = create_enum(field.capitalize() + "Enum", constraints[field])

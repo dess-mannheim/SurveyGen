@@ -37,7 +37,7 @@ class LLMInterview:
     --------------
     ```python
     interview = LLMInterview(interview_path="questions.csv")
-    interview.prepare_interview(question_stem="Do you thing QUESTION_CONTENT_PLACEHOLDER is good?", answer_options=AnswerOptions(...))
+    interview.prepare_interview(question_stem="Do you think {QUESTION_CONTENT_PLACEHOLDER} is good?", answer_options=AnswerOptions(...))
     prompt = interview.get_prompt_structure()
     print(prompt)
     ```
