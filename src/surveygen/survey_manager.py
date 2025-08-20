@@ -224,8 +224,8 @@ class SurveyOptionGenerator:
         reversed_order: bool = False,
         even_order: bool = False,
         idx_type: Optional[_IDX_TYPES] = None, # uses the answer_texts.keys() as an index by default
-        list_prompt_template: str = prompt_templates.LIST_OPTIONS_DEFAULT,
-        scale_prompt_template: str = prompt_templates.SCALE_OPTIONS_DEFAULT,
+        list_prompt_template: Optional[str] = prompt_templates.LIST_OPTIONS_DEFAULT,
+        scale_prompt_template: Optional[str] = prompt_templates.SCALE_OPTIONS_DEFAULT,
         options_separator: str = ", ",
     ):
 

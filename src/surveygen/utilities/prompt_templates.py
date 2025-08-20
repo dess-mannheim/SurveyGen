@@ -1,5 +1,9 @@
 from typing import Final
 
+# --- Empty Answer Option Template ---
+# use this if answer options are already provided in the system prompt
+NO_ANSWER_OPTIONS: Final[None] = None
+
 # --- List Option Templates (for multiple choice) ---
 # Placeholder: {options}
 

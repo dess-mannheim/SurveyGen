@@ -14,9 +14,9 @@ class AnswerOptions:
     def __init__(
         self,
         answer_text: List[str],
-        from_to_scale: bool,
-        list_prompt_template: str = prompt_templates.LIST_OPTIONS_DEFAULT,
-        scale_prompt_template: str = prompt_templates.SCALE_OPTIONS_DEFAULT,
+        from_to_scale: bool = False,
+        list_prompt_template: Optional[str] = prompt_templates.LIST_OPTIONS_DEFAULT,
+        scale_prompt_template: Optional[str] = prompt_templates.SCALE_OPTIONS_DEFAULT,
         options_seperator: str = ", "
     ):
         """
@@ -33,20 +33,22 @@ class AnswerOptions:
         """
         self.answer_text: List[str] = answer_text
         self.from_to_scale: bool = from_to_scale
-        self.list_prompt_template: str = list_prompt_template
-        self.scale_prompt_template: str = scale_prompt_template
+        self.list_prompt_template: Optional[str] = list_prompt_template
+        self.scale_prompt_template: Optional[str] = scale_prompt_template
         self.options_seperator: str = options_seperator
 
     def create_options_str(self) -> str:
-        if not self.from_to_scale:
-            joined_options = self.options_seperator.join(self.answer_text)
-            return self.list_prompt_template.format(options=joined_options)
-        else:
+        if self.from_to_scale:
+            if self.scale_prompt_template is None: return None
             if len(self.answer_text) < 2:
-                return "Scale requires at least a start and end value."
+                raise ValueError(f"From-To scale requires at least a start and end value, but answer_text was set to {self.answer_text}.")
             start_option = self.answer_text[0]
             end_option = self.answer_text[-1]
-            return self.scale_prompt_template.format(start=start_option, end=end_option)
+            return self.scale_prompt_template.format(start=start_option, end=end_option)        
+        else:
+            if self.list_prompt_template is None: return None
+            joined_options = self.options_seperator.join(self.answer_text)
+            return self.list_prompt_template.format(options=joined_options)
 
 
 class QuestionLLMResponseTuple(NamedTuple):

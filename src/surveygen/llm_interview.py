@@ -107,7 +107,9 @@ class LLMInterview:
         ]
 
         if self._global_options:
-            parts.append(self._global_options.create_options_str())
+            _options_str = self._global_options.create_options_str()
+            if _options_str is not None:
+                parts.append(_options_str)
 
         parts.append("FIRST QUESTION:")
         parts.append(self.generate_question_prompt(self._questions[0]))
@@ -129,7 +131,9 @@ class LLMInterview:
         parts = [self.system_prompt, self.interview_instruction]
 
         if self._global_options:
-            parts.append(self._global_options.create_options_str())
+            _options_str = self._global_options.create_options_str()
+            if _options_str is not None:
+                parts.append(_options_str)
 
         if interview_type == InterviewType.QUESTION:
             parts.append(self.generate_question_prompt(self._questions[0]))
@@ -375,9 +379,9 @@ class LLMInterview:
             question_prompt = f"""{interview_question.question_stem} {interview_question.question_content}"""
 
         if interview_question.answer_options:
-            options_prompt = interview_question.answer_options.create_options_str()
-            question_prompt = f"""{question_prompt} 
-{options_prompt}"""
+            _options_str = interview_question.answer_options.create_options_str()
+            if _options_str is not None:
+                question_prompt = '\n'.join([question_prompt, _options_str])
 
         return question_prompt
 
@@ -395,12 +399,9 @@ class LLMInterview:
         default_prompt = f"""{self.interview_instruction}"""
 
         if self._global_options:
-            options_prompt = self._global_options.create_options_str()
-            if len(default_prompt) > 0:
-                default_prompt = f"""{default_prompt} 
-{options_prompt}"""
-            else:
-                default_prompt = options_prompt
+            _options_str = self._global_options.create_options_str()
+            if _options_str is not None:
+                default_prompt = '\n'.join([default_prompt, _options_str])
 
         question_prompts = {}
 
