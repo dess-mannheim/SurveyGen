@@ -395,7 +395,7 @@ def conduct_survey_question_by_question(
 
     survey_results: List[InterviewResult] = []
 
-    #TODO allow for different answer option constraints between surveys
+    #TODO allow for different answer option constraints between surveys/questions
     if structured_output_options:
         if structured_output_options.constraints:
             for json_element in structured_output_options.constraints.keys():
@@ -418,7 +418,9 @@ def conduct_survey_question_by_question(
         if structured_output_options:
             if structured_output_options.category == "json" and structured_output_options.automatic_system_prompt:
                 system_messages = [
-                    inference.json_system_prompt(json_options=structured_output_options.json_fields)
+                    inference.json_system_prompt(
+                        json_fields=structured_output_options.json_fields
+                    )
                     for inference in current_batch
                 ]
             else:
@@ -770,7 +772,7 @@ def conduct_survey_in_context(
         if structured_output_options:
             if structured_output_options.category == "json" and structured_output_options.automatic_system_prompt:
                 system_messages = [
-                    inference.json_system_prompt(json_options=structured_output_options.json_fields)
+                    inference.json_system_prompt(json_fields=structured_output_options.json_fields)
                     for inference in current_batch
                 ]
             else:

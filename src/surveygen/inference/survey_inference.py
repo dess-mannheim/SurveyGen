@@ -32,14 +32,14 @@ class StructuredOutputOptions:
 
     Attributes:
         category: Type of structured output ("choice" or "json")
-        json_fields: List of field names for JSON output
+        json_fields: List of field names for JSON output, optionally as dicts of format {"field_name": "explanation"}
         constraints: Optional constraints for field values
         allowed_choices: List of allowed choices for choice output
         automatic_system_prompt: If a instruction to only output in the required json format should be added to the system prompt
     """
 
     category: Literal["choice", "json"]
-    json_fields: Optional[List[str]] = None
+    json_fields: Optional[List[str] | Dict[str, str]] = None
     constraints: Optional[Dict[str, List[str]]] = None
     allowed_choices: Optional[List[str]] = None
     automatic_system_prompt: bool = False
@@ -514,6 +514,7 @@ async def _run_api_batch_async(
                         },
                     }
                 elif structured_output_options.category == "choice":
+                    #TODO: add warning if this is not running against vllm, i.e., guided_choice is not supported
                     request_kwargs["extra_body"] = {"guided_choice": structured_output}
 
             return await client.chat.completions.create(**request_kwargs)
