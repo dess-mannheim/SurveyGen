@@ -7,20 +7,9 @@ from ..utilities import prompt_templates
 from ..utilities.survey_objects import AnswerOptions
 
 
-def _get_valid_outputs(answer_options: AnswerOptions, output_index_only: bool = False) -> List[str]:
-        if output_index_only:
-            if answer_options.index is not None:
-                return [str(i) for i in answer_options.index]
-            else:
-                warnings.warn(
-                    "Answer Production Method configured to only output index of answer options," + \
-                    " but no index was initialized. Returning full answer option texts instead.",
-                    category = RuntimeWarning
-                    )
-                return answer_options.answer_text
-        else:
-            return answer_options.answer_text
 
+# --- Answer Production Base Classes ---
+# TODO: make the answer production methods compatible with being passed as a list
 
 class AnswerProductionMethod(ABC):
     """Abstract base class for constraining the model output, e.g., for closed-ended survey questions."""
@@ -80,8 +69,59 @@ class Choice_AnswerProductionMethod(AnswerProductionMethod):
         super().__init__()
         self.allowed_choices = allowed_choices
         self.automatic_system_prompt = automatic_system_prompt
+        self.system_prompt_template = system_prompt_template 
+        self.output_index_only = output_index_only # TODO: implement
+
+
+class TokenProb_AnswerProductionMethod(AnswerProductionMethod):
+    def __init__(
+            self,
+            token_position: int = 0,
+            top_logprobs: int = 20, # the OpenAI API default, local vllm deployments might give you more
+            restrict_choices: bool = False,
+            allowed_choices: Optional[List[str]] = None,
+            automatic_system_prompt: bool = False,
+            system_prompt_template: str = prompt_templates.SYSTEM_SINGLE_ANSWER,
+            output_index_only: bool = False
+    ):
+        """
+        Base class for constraining the model output by requesting token proabilities
+        
+        Attributes:
+            token_position: At which position in the output to capture the logprobs, use `0` for first-token probabilities (default)
+            top_logprobs: How many of the logprobs to consider, OpenAI supports at most 20
+            restrict_choices: If true, restrict output additionally with `guided_choice`, using the `tokens` provided
+            allowed_choices: List of allowed choices for choice output
+            automatic_system_prompt: If a instruction to only output in the required json format should be added to the system prompt
+            system_prompt_template: Template to use for formatting the system prompt, e.g., from `..utilities.prompt_templates`
+            output_index_only: If True, constrain output to answer option index rather then the full text of each answer option
+        """
+        super().__init__()
+        self.token_position = token_position
+        self.top_logprobs = top_logprobs
+        self.restrict_choices = restrict_choices
+        self.allowed_choices = allowed_choices # same name enables re-using code from Choice_AnswerProductionMethod
+        self.automatic_system_prompt = automatic_system_prompt
         self.system_prompt_template = system_prompt_template
-        self.output_index_only = output_index_only 
+        self.output_index_only = output_index_only # TODO: implement
+
+
+
+# --- Specific Answer Production Methods ---
+
+def _get_valid_outputs(answer_options: AnswerOptions, output_index_only: bool = False) -> List[str]:
+        if output_index_only:
+            if answer_options.index is not None:
+                return [str(i) for i in answer_options.index]
+            else:
+                warnings.warn(
+                    "Answer Production Method configured to only output index of answer options," + \
+                    " but no index was initialized. Returning full answer option texts instead.",
+                    category = RuntimeWarning
+                    )
+                return answer_options.answer_text
+        else:
+            return answer_options.answer_text
 
 
 class StructuredOutput_SingleAnswer(JSON_AnswerProductionMethod):

@@ -46,8 +46,8 @@ SCALE_OPTIONS_MINIMAL: Final[str] = "{start} to {end}"
 
 
 
-# --- System Prompt JSON Templates ---
-# optionally add JSON formatting instructions to the system prompt
+# --- System Prompt Templates ---
+# optionally add formatting instructions to the system prompt
 # Placeholder: {options}
 
 SYSTEM_JSON_DEFAULT: Final[str] = """You only respond in the following JSON format:"""
@@ -61,3 +61,6 @@ You respond with your reasoning and the most probable answer option in the follo
 
 SYSTEM_JSON_ALL_OPTIONS: Final[str] = """These are the possible answer options: [{options}].
 You only respond with a probability for each answer option in the following JSON format:"""
+
+SYSTEM_SINGLE_ANSWER: Final[str] = """These are the possible answer options: [{options}].
+You only respond with the most probable answer option."""

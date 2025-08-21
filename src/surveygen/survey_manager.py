@@ -92,7 +92,7 @@ class SurveyOptionGenerator:
 
     LIKERT_IMPORTANCE_FROM_TO: List[str] = ["Not at all important", "Very Important"]
     LIKERT_JUSTIFIABLE_FROM_TO: List[str] = ["Never justifiable", "Always justifiable"]
-    _IDX_TYPES = Literal["char_low", "char_upper", "integer", "no_index"]
+    _IDX_TYPES = Literal["char_lower", "char_upper", "integer", "no_index"]
 
     @staticmethod
     def generate_likert_options(
@@ -137,7 +137,7 @@ class SurveyOptionGenerator:
         :param scale_prompt_template: The format string for a range-style prompt. Must contain `{start}`
                                     and `{end}`.
         :type scale_prompt_template: str
-        :param idx_type: The type of index for the scale: "char_low", "char_upper", "integer", or "no_index".
+        :param idx_type: The type of index for the scale: "char_lower", "char_upper", "integer", or "no_index".
         :type idx_type: _IDX_TYPES
 
         :raises ValueError: If `n` is less than 2, if `random_order` and `reversed_order` are both True,
@@ -200,7 +200,7 @@ class SurveyOptionGenerator:
                 answer_option_index.append(answer_code)
         else:
             # TODO @Jens add these to constants.py
-            if idx_type == "char_low":
+            if idx_type == "char_lower":
                 for i in range(n):
                     answer_option = f"{ascii_lowercase[i]}: {answer_texts[i]}"
                     answer_options.append(answer_option)
@@ -241,7 +241,7 @@ class SurveyOptionGenerator:
         answer_texts = answer_texts.values()
         # answer_options = descriptions
 
-        if idx_type == 'char_low':
+        if idx_type == 'char_lower':
             if all(isinstance(item, int) for item in answer_codes):
                 new_codes = []
                 for i in answer_codes:
@@ -439,6 +439,10 @@ def conduct_survey_question_by_question(
                     )
                     for inference in current_batch
                 ]
+            elif answer_production_method.automatic_system_prompt:
+                _answer_options = ', '.join(inference_options[0].answer_options[0].answer_text)
+                _instructions = answer_production_method.system_prompt_template.format(options=_answer_options)
+                system_messages = [f"{inference.system_prompt}\n{_instructions}" for inference in current_batch]
             else:
                 system_messages = [inference.system_prompt for inference in current_batch]
         else:
@@ -452,7 +456,7 @@ def conduct_survey_question_by_question(
             for inference in current_batch
         ]
 
-        output = batch_generation(
+        output, logprobs = batch_generation(
             model=model,
             system_messages=system_messages,
             prompts=prompts,
@@ -622,6 +626,7 @@ def conduct_whole_survey_one_prompt(
                     ]
                 else:
                     system_messages = [inference.system_prompt for inference in current_batch]
+            # TODO: add support for automatic system prompt for other answer production methods
             elif isinstance(answer_production_method, Choice_AnswerProductionMethod):
                 if answer_production_method.allowed_choices == constants.OPTIONS_ADJUST:
                     answer_production_method.allowed_choices = inference_option.answer_options[0].answer_text
@@ -630,7 +635,7 @@ def conduct_whole_survey_one_prompt(
             system_messages = [inference.system_prompt for inference in current_batch]
         prompts = [inference.create_all_questions() for inference in current_batch]
 
-        output = batch_generation(
+        output, logprobs = batch_generation(
             model=model,
             system_messages=system_messages,
             prompts=prompts,
@@ -796,6 +801,7 @@ def conduct_survey_in_context(
                     inference.json_system_prompt(json_fields=answer_production_method.json_fields)
                     for inference in current_batch
                 ]
+            # TODO: add support for automatic system prompt for other answer production methods
             else:
                 system_messages = [inference.system_prompt for inference in current_batch]
         else:

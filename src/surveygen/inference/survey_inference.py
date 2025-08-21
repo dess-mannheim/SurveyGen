@@ -15,7 +15,12 @@ from openai.types.chat import ChatCompletion
 from typing import Any, List, Optional, Union, Dict
 
 from .dynamic_pydantic import generate_pydantic_model
-from .answer_production import AnswerProductionMethod, JSON_AnswerProductionMethod, Choice_AnswerProductionMethod
+from .answer_production import (
+    AnswerProductionMethod,
+    JSON_AnswerProductionMethod,
+    Choice_AnswerProductionMethod,
+    TokenProb_AnswerProductionMethod
+)
 
 import json
 import random
@@ -116,7 +121,12 @@ def batch_generation(
 
     seeds = _generate_seeds(seed, batch_size=batch_size)
 
+    logprob_result = None
+
     if isinstance(model, LLM):
+        if isinstance(answer_production_method, TokenProb_AnswerProductionMethod):
+            generation_kwargs["logprobs"] = answer_production_method.top_logprobs
+
         sampling_params_list = _create_sampling_params(
             batch_size=batch_size,
             seeds=seeds,
@@ -129,8 +139,23 @@ def batch_generation(
             use_tqdm=print_progress,
         )
         result = [output.outputs[0].text for output in outputs]
+        if isinstance(answer_production_method, TokenProb_AnswerProductionMethod):
+            logprob_result = []
+            for req_output in outputs:
+                logprob_position = answer_production_method.token_position
+                answer_dict = {
+                    x.decoded_token: x.logprob
+                    for x in req_output.outputs[0].logprobs[logprob_position].values()
+                }
+                logprob_result.append(answer_dict)
 
     else:
+        if isinstance(answer_production_method, TokenProb_AnswerProductionMethod):
+            raise NotImplementedError("The TokenProb_AnswerProductionMethod is not yet implemented " + \
+                                      "for use with the OpenAI API. Use vllm offline inference instead.")
+            generation_kwargs["logprobs"] = True
+            generation_kwargs["top_logprobs"] = answer_production_method.top_logprobs
+
         result = _run_async_in_thread(
             client=model,
             client_model_name=client_model_name,
@@ -146,10 +171,12 @@ def batch_generation(
         conversation_print = "Conversation:"
         for system_message, prompt, answer in zip(system_messages, prompts, result):
             round_print = f"{conversation_print}\nSystem Message:\n{system_message}\nUser Message:\n{prompt}\nGenerated Message\n{answer}"
+            if isinstance(answer_production_method, TokenProb_AnswerProductionMethod):
+                round_print += '\n' + str(logprob_result)
             tqdm.write(round_print)
             break
 
-    return result
+    return (result, logprob_result)
 
 
 def _make_cache_key(fields: Any, constraints: Any) -> str:
@@ -207,6 +234,9 @@ def _structured_sampling_params(
     use_vllm: bool = True,
     **generation_kwargs: Any,
 ) -> Union[List[SamplingParams], Dict[str, Any]]:
+    
+    guided_decodings = []
+
     if isinstance(answer_production_method, AnswerProductionMethod):
         if isinstance(answer_production_method, JSON_AnswerProductionMethod):
             pydantic_model = generate_pydantic_model(
@@ -219,16 +249,15 @@ def _structured_sampling_params(
                 guided_decodings = [global_guided_decoding] * batch_size
             else:
                 guided_decodings = [json_schema] * batch_size
-        elif isinstance(answer_production_method, Choice_AnswerProductionMethod):
+        elif (isinstance(answer_production_method, Choice_AnswerProductionMethod) or
+              (isinstance(answer_production_method, TokenProb_AnswerProductionMethod)
+              and answer_production_method.restrict_choices)):
+            _allowed_choices = [str(c) for c in answer_production_method.allowed_choices]
             if use_vllm:
-                global_guided_decoding = GuidedDecodingParams(
-                    choice=answer_production_method.allowed_choices
-                )
+                global_guided_decoding = GuidedDecodingParams(choice=_allowed_choices)
                 guided_decodings = [global_guided_decoding] * batch_size
             else:
-                guided_decodings = [
-                    answer_production_method.allowed_choices
-                ] * batch_size
+                guided_decodings = [_allowed_choices] * batch_size
 
     else:
         guided_decodings = []
@@ -252,25 +281,32 @@ def _structured_sampling_params(
                         cache[key] = json_schema
 
                 guided_decodings.append(cache[key])
-            elif isinstance(answer_production_method[i], Choice_AnswerProductionMethod):
-                choice = answer_production_method[i].allowed_choices
+            elif (isinstance(answer_production_method, Choice_AnswerProductionMethod) or
+                  (isinstance(answer_production_method, TokenProb_AnswerProductionMethod)
+                  and answer_production_method.restrict_choices)):
+                _allowed_choices = [str(c) for c in answer_production_method[i].allowed_choices]
 
-                key = _make_cache_key(choice, None)
+                key = _make_cache_key(_allowed_choices, None)
 
                 if key not in cache:
                     if use_vllm:
-                        cache[key] = GuidedDecodingParams(choice=choice)
+                        cache[key] = GuidedDecodingParams(choice=_allowed_choices)
                     else:
-                        cache[key] = choice
+                        cache[key] = _allowed_choices
                 guided_decodings.append(cache[key])
 
-    if use_vllm:
+    if use_vllm and len(guided_decodings) == batch_size:
         sampling_params_list = [
             SamplingParams(
                 seed=seeds[i],
                 guided_decoding=guided_decodings[i],
                 **generation_kwargs,
             )
+            for i in range(batch_size)
+        ]
+    elif use_vllm:
+        sampling_params_list = [
+            SamplingParams(seed=seeds[i], **generation_kwargs)
             for i in range(batch_size)
         ]
     else:

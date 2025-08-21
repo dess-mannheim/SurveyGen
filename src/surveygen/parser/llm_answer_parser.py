@@ -192,7 +192,7 @@ def llm_parse_all(
         system_messages = [system_prompt] * len(all_prompts)
 
         # Perform the single, efficient batch inference.
-        llm_parsed_results = batch_generation(
+        llm_parsed_results, logprobs = batch_generation(
             model,
             system_messages = system_messages,
             prompts = all_prompts,
