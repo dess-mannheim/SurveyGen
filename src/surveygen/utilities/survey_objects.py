@@ -9,33 +9,27 @@ from dataclasses import dataclass
 if TYPE_CHECKING:
     from ..llm_interview import LLMInterview
 
+@dataclass
 class AnswerOptions:
+    """
+    Stores answer options for a single question or a full questionnaire.
 
-    def __init__(
-        self,
-        answer_text: List[str],
-        from_to_scale: bool = False,
-        list_prompt_template: Optional[str] = prompt_templates.LIST_OPTIONS_DEFAULT,
-        scale_prompt_template: Optional[str] = prompt_templates.SCALE_OPTIONS_DEFAULT,
-        options_seperator: str = ", "
-    ):
-        """
-        Initializes the AnswerOptions object.
-
-        Args:
-            answer_text (list): A list of possible answer strings.
-            from_to_scale (bool): If True, treat answer_text as a scale [start, ..., end].
-            list_prompt_template (str): A format string for list-based options.
-                                        Must contain an '{options}' placeholder.
-            scale_prompt_template (str): A format string for scale-based options.
-                                         Must contain '{start}' and '{end}' placeholders.
-            options_seperator (str): The seperator string used between options.
-        """
-        self.answer_text: List[str] = answer_text
-        self.from_to_scale: bool = from_to_scale
-        self.list_prompt_template: Optional[str] = list_prompt_template
-        self.scale_prompt_template: Optional[str] = scale_prompt_template
-        self.options_seperator: str = options_seperator
+    Args:
+        answer_text (list): A list of possible answer strings.
+        index (list | None): Optionally, store answer option index separately, e.g., for structured outputs.
+        from_to_scale (bool): If True, treat answer_text as a scale [start, ..., end].
+        list_prompt_template (str): A format string for list-based options.
+                                    Must contain an '{options}' placeholder.
+        scale_prompt_template (str): A format string for scale-based options.
+                                        Must contain '{start}' and '{end}' placeholders.
+        options_seperator (str): The seperator string used between options.
+    """
+    answer_text: List[str]
+    index: Optional[List[str]] = None
+    from_to_scale: bool = False
+    list_prompt_template: Optional[str] = prompt_templates.LIST_OPTIONS_DEFAULT
+    scale_prompt_template: Optional[str] = prompt_templates.SCALE_OPTIONS_DEFAULT
+    options_seperator: str = ", "
 
     def create_options_str(self) -> str:
         if self.from_to_scale:

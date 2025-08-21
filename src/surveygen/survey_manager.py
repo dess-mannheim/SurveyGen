@@ -178,10 +178,12 @@ class SurveyOptionGenerator:
             answer_options = answer_options[::-1]
 
         answer_options = []
+        answer_option_index = []
 
         if idx_type == "no_index":
             # no index, just the answer options directly
             answer_options = answer_texts
+            answer_option_index = None
         elif idx_type == "integer":
             for i in range(n):
                 answer_code = i + start_idx
@@ -194,23 +196,27 @@ class SurveyOptionGenerator:
                 elif answer_texts:
                     answer_option = f"{answer_code}: {answer_texts[i]}"
                 answer_options.append(answer_option)
+                answer_option_index.append(answer_code)
         else:
             # TODO @Jens add these to constants.py
             if idx_type == "char_low":
                 for i in range(n):
                     answer_option = f"{ascii_lowercase[i]}: {answer_texts[i]}"
                     answer_options.append(answer_option)
+                    answer_option_index.append(ascii_lowercase[i])
             elif idx_type == "char_upper":
                 for i in range(n):
                     answer_option = f"{ascii_uppercase[i]}: {answer_texts[i]}"
                     answer_options.append(answer_option)
+                    answer_option_index.append(ascii_uppercase[i])
 
         interview_option = AnswerOptions(
-            answer_options,
-            from_to_scale=only_from_to_scale,
-            list_prompt_template=list_prompt_template,
-            scale_prompt_template=scale_prompt_template,
-            options_seperator=options_separator,
+            answer_text = answer_options,
+            index = answer_option_index,
+            from_to_scale = only_from_to_scale,
+            list_prompt_template = list_prompt_template,
+            scale_prompt_template = scale_prompt_template,
+            options_seperator = options_separator,
         )
 
         return interview_option
@@ -323,17 +329,20 @@ class SurveyOptionGenerator:
                 )
 
         if idx_type == 'no_index':
-            answer_options = list(answer_options.values())
+            answer_option_strings = list(answer_options.values())
+            answer_option_index = None
         else:
-            answer_options = [f"{key}: {val}" for key, val in answer_options.items()]
+            answer_option_strings = [f"{key}: {val}" for key, val in answer_options.items()]
+            answer_option_index = list(answer_options.keys())
         #print(answer_options)
 
         interview_option = AnswerOptions(
-            answer_options,
-            from_to_scale=only_from_to_scale,
-            list_prompt_template=list_prompt_template,
-            scale_prompt_template=scale_prompt_template,
-            options_seperator=options_separator,
+            answer_text = answer_option_strings,
+            index = answer_option_index,
+            from_to_scale = only_from_to_scale,
+            list_prompt_template = list_prompt_template,
+            scale_prompt_template = scale_prompt_template,
+            options_seperator = options_separator,
         )
 
         return interview_option

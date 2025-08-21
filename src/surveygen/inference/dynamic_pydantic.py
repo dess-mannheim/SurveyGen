@@ -22,11 +22,11 @@ def generate_pydantic_model(
     for field in fields:
         if field in constraints and isinstance(constraints[field], list):
             enum_type = create_enum(field.capitalize() + "Enum", constraints[field])
-            model_fields[field] = (enum_type, ...)
+            model_fields[str(field)] = (enum_type, ...)
         # allow for probability distribution across answer options
         elif field in constraints and constraints[field] == float:
-            model_fields[field] = (float, ...)
+            model_fields[str(field)] = (float, ...)
         else:
-            model_fields[field] = (str, ...)
+            model_fields[str(field)] = (str, ...)
 
     return create_model("DynamicModel", **model_fields)
