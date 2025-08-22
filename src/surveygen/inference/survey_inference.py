@@ -19,7 +19,7 @@ from .answer_production import (
     AnswerProductionMethod,
     JSON_AnswerProductionMethod,
     Choice_AnswerProductionMethod,
-    TokenProb_AnswerProductionMethod
+    Logprob_AnswerProductionMethod
 )
 
 import json
@@ -124,7 +124,8 @@ def batch_generation(
     logprob_result = None
 
     if isinstance(model, LLM):
-        if isinstance(answer_production_method, TokenProb_AnswerProductionMethod):
+        # TODO: add support for List[AnswerProductionMethod]
+        if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
             generation_kwargs["logprobs"] = answer_production_method.top_logprobs
 
         sampling_params_list = _create_sampling_params(
@@ -139,7 +140,7 @@ def batch_generation(
             use_tqdm=print_progress,
         )
         result = [output.outputs[0].text for output in outputs]
-        if isinstance(answer_production_method, TokenProb_AnswerProductionMethod):
+        if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
             logprob_result = []
             for req_output in outputs:
                 logprob_position = answer_production_method.token_position
@@ -150,8 +151,9 @@ def batch_generation(
                 logprob_result.append(answer_dict)
 
     else:
-        if isinstance(answer_production_method, TokenProb_AnswerProductionMethod):
-            raise NotImplementedError("The TokenProb_AnswerProductionMethod is not yet implemented " + \
+        # TODO: add support for List[AnswerProductionMethod]
+        if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
+            raise NotImplementedError("The Logprob_AnswerProductionMethod is not yet implemented " + \
                                       "for use with the OpenAI API. Use vllm offline inference instead.")
             generation_kwargs["logprobs"] = True
             generation_kwargs["top_logprobs"] = answer_production_method.top_logprobs
@@ -166,13 +168,13 @@ def batch_generation(
             **generation_kwargs,
         )
 
-    # TODO add argurment to specify how many conversations should be printed (base argument should be reasonable)
+    # TODO add argument to specify how many conversations should be printed (base argument should be reasonable)
     if print_conversation:
-        conversation_print = "Conversation:"
+        conversation_print = "--- Conversation ---"
         for system_message, prompt, answer in zip(system_messages, prompts, result):
-            round_print = f"{conversation_print}\nSystem Message:\n{system_message}\nUser Message:\n{prompt}\nGenerated Message\n{answer}"
-            if isinstance(answer_production_method, TokenProb_AnswerProductionMethod):
-                round_print += '\n' + str(logprob_result)
+            round_print = f"{conversation_print}\n-- System Message --\n{system_message}\n-- User Message ---\n{prompt}\n-- Generated Message --\n{answer}"
+            if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
+                round_print += '\n-- Logprobs --\n' + str(logprob_result)
             tqdm.write(round_print)
             break
 
@@ -249,9 +251,8 @@ def _structured_sampling_params(
                 guided_decodings = [global_guided_decoding] * batch_size
             else:
                 guided_decodings = [json_schema] * batch_size
-        elif (isinstance(answer_production_method, Choice_AnswerProductionMethod) or
-              (isinstance(answer_production_method, TokenProb_AnswerProductionMethod)
-              and answer_production_method.restrict_choices)):
+        elif (isinstance(answer_production_method, (Choice_AnswerProductionMethod, Logprob_AnswerProductionMethod))
+                  and answer_production_method.allowed_choices is not None):
             _allowed_choices = [str(c) for c in answer_production_method.allowed_choices]
             if use_vllm:
                 global_guided_decoding = GuidedDecodingParams(choice=_allowed_choices)
@@ -281,9 +282,8 @@ def _structured_sampling_params(
                         cache[key] = json_schema
 
                 guided_decodings.append(cache[key])
-            elif (isinstance(answer_production_method, Choice_AnswerProductionMethod) or
-                  (isinstance(answer_production_method, TokenProb_AnswerProductionMethod)
-                  and answer_production_method.restrict_choices)):
+            elif (isinstance(answer_production_method[i], (Choice_AnswerProductionMethod, Logprob_AnswerProductionMethod))
+                  and answer_production_method[i].allowed_choices is not None):
                 _allowed_choices = [str(c) for c in answer_production_method[i].allowed_choices]
 
                 key = _make_cache_key(_allowed_choices, None)
@@ -394,6 +394,7 @@ def batch_turn_by_turn_generation(
             sampling_params=sampling_params_list,
             use_tqdm=print_progress,
         )
+        # TODO: add support for logprobs
         result = [output.outputs[0].text for output in outputs]
 
     else:
@@ -407,7 +408,7 @@ def batch_turn_by_turn_generation(
             **generation_kwargs,
         )
 
-    # TODO add argurment to specify how many conversations should be printed
+    # TODO add argument to specify how many conversations should be printed
     if print_conversation:
         conversation_print = "Conversation:"
         for system_message, prompt_list, assistant_list, answer in zip(

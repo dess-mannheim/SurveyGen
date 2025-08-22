@@ -469,13 +469,14 @@ def conduct_survey_question_by_question(
             **generation_kwargs,
         )
 
-        for survey_id, question, answer, item in zip(
-            range(len(current_batch)), questions, output, current_batch
+        for survey_id, question, answer, logprob_answer, item in zip(
+            range(len(current_batch)), questions, output, logprobs, current_batch
         ):
             question_llm_response_pairs[survey_id].update(
-                {item.order[i]: QuestionLLMResponseTuple(question, answer)}
+                {item.order[i]: QuestionLLMResponseTuple(question, answer, logprob_answer)}
             )
 
+        # TODO: check that this works with logprobs
         _intermediate_saves(interviews, n_save_step, intermediate_save_file, question_llm_response_pairs, i)
 
     for i, survey in enumerate(interviews):
@@ -648,11 +649,11 @@ def conduct_whole_survey_one_prompt(
             **generation_kwargs,
         )
 
-        for survey_id, prompt, answer in zip(
-            range(len(current_batch)), prompts, output
+        for survey_id, prompt, answer, logprob_answer in zip(
+            range(len(current_batch)), prompts, output, logprobs
         ):
             question_llm_response_pairs[survey_id].update(
-                {-1: QuestionLLMResponseTuple(prompt, answer)}
+                {-1: QuestionLLMResponseTuple(prompt, answer, logprob_answer)}
             )
         
         _intermediate_saves(interviews, n_save_step, intermediate_save_file, question_llm_response_pairs, i)
@@ -788,7 +789,7 @@ def conduct_survey_in_context(
                 question_llm_response[survey_id].update(
                     {
                         item._questions[i].item_id: QuestionLLMResponseTuple(
-                            question, llm_response
+                            question, llm_response, None
                         )
                     }
                 )
@@ -829,7 +830,7 @@ def conduct_survey_in_context(
             question_llm_response[survey_id].update(
                 {
                     item._questions[i].item_id: QuestionLLMResponseTuple(
-                        question, llm_response
+                        question, llm_response, None
                     )
                 }
             )

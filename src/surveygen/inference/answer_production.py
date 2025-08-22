@@ -73,12 +73,11 @@ class Choice_AnswerProductionMethod(AnswerProductionMethod):
         self.output_index_only = output_index_only # TODO: implement
 
 
-class TokenProb_AnswerProductionMethod(AnswerProductionMethod):
+class Logprob_AnswerProductionMethod(AnswerProductionMethod):
     def __init__(
             self,
             token_position: int = 0,
             top_logprobs: int = 20, # the OpenAI API default, local vllm deployments might give you more
-            restrict_choices: bool = False,
             allowed_choices: Optional[List[str]] = None,
             automatic_system_prompt: bool = False,
             system_prompt_template: str = prompt_templates.SYSTEM_SINGLE_ANSWER,
@@ -90,8 +89,7 @@ class TokenProb_AnswerProductionMethod(AnswerProductionMethod):
         Attributes:
             token_position: At which position in the output to capture the logprobs, use `0` for first-token probabilities (default)
             top_logprobs: How many of the logprobs to consider, OpenAI supports at most 20
-            restrict_choices: If true, restrict output additionally with `guided_choice`, using the `tokens` provided
-            allowed_choices: List of allowed choices for choice output
+            allowed_choices: If not None, restrict output additionally with `guided_choice`
             automatic_system_prompt: If a instruction to only output in the required json format should be added to the system prompt
             system_prompt_template: Template to use for formatting the system prompt, e.g., from `..utilities.prompt_templates`
             output_index_only: If True, constrain output to answer option index rather then the full text of each answer option
@@ -99,7 +97,6 @@ class TokenProb_AnswerProductionMethod(AnswerProductionMethod):
         super().__init__()
         self.token_position = token_position
         self.top_logprobs = top_logprobs
-        self.restrict_choices = restrict_choices
         self.allowed_choices = allowed_choices # same name enables re-using code from Choice_AnswerProductionMethod
         self.automatic_system_prompt = automatic_system_prompt
         self.system_prompt_template = system_prompt_template

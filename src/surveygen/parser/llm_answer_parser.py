@@ -10,6 +10,7 @@ from ..utilities import constants
 from vllm import LLM
 
 import pandas as pd
+import numpy as np
 
 import json
 
@@ -18,6 +19,7 @@ import json_repair
 import re
 
 from collections import defaultdict
+import warnings
 
 
 DEFAULT_SYSTEM_PROMPT: str = "You are a helpful assistant."
@@ -26,7 +28,7 @@ DEFAULT_PROMPT: str = (
 )
 
 
-def json_parser_str(answer: str) -> Dict[str, str]:
+def json_parser_str(answer: str) -> Dict[str, str] | None:
     try:
         result_json = json.loads(answer)
     except:
@@ -46,7 +48,7 @@ def json_parse_all(survey_results: List[InterviewResult]) -> Dict[LLMInterview, 
         for key, value in survey_result.results.items():
             # value:QuestionAnswerTuple
             parsed_llm_response = json_parser_str(value.llm_response)
-            if parsed_llm_response:
+            if parsed_llm_response is not None:
                 answer_format = parsed_llm_response.keys()
                 answers.append((key, value.question, *parsed_llm_response.values()))
             else:
@@ -222,3 +224,85 @@ def llm_parse_all(
     }
 
     return all_results
+
+
+def _filter_logprobs_by_choices(
+        logprob_df: pd.DataFrame,
+        choices: pd.Series
+    ) -> pd.DataFrame:
+
+    matches_found = []
+    
+    # check for each output token whether any of the choices start with this token
+    for token in logprob_df['token']:
+        boolean_index = choices.str.startswith(token) #contains('^(?:' + '|'.join(token) + ')', regex=True)
+        if len(choices[boolean_index]) > 1:
+            warnings.warn(
+                f"Multiple allowed_choices ({list(choices[boolean_index])}) match the same output token: {token}",
+                stacklevel=2
+            )
+        matches_found.append(boolean_index.any())
+    
+    return logprob_df[matches_found]
+
+
+def _logprobs_filter(
+        logprobs: Dict[str, float],
+        allowed_choices: Dict[str, List[str]]
+    ) -> Dict[str, float]:
+    
+    # normalize logprobs
+    logprob_df = pd.DataFrame({'token': logprobs.keys(), 'prob': logprobs.values()})
+    logprob_df['prob'] = logprob_df.prob.apply(np.exp)
+    logprob_df = logprob_df[logprob_df.prob > 0]
+
+    # flatten to check for collisions between answer options
+    all_valid_outputs = [output for choices in allowed_choices.values() for output in choices]
+    _ = _filter_logprobs_by_choices(logprob_df, pd.Series(all_valid_outputs))
+
+    # filter the individual survey answers
+    choice_results = {}
+    for choice, valid_outputs in allowed_choices.items():
+        valid_logprobs = _filter_logprobs_by_choices(logprob_df, pd.Series(valid_outputs))
+        if len(valid_logprobs) == 0:
+            warnings.warn(f"Could not find logprobs for answer option {choice} with possible outputs {valid_outputs}")
+        choice_results[choice] = valid_logprobs['prob'].sum()
+    
+    # normalize so that probs sum up to 1
+    overall_sum = sum(choice_results.values())
+    choice_results = {choice: token_sum/overall_sum for choice, token_sum in choice_results.items()}
+
+    return choice_results
+
+
+def logprobs_parse_all(
+        survey_results: List[InterviewResult],
+        allowed_choices: List[str] | Dict[str, List[str]]
+    ) -> Dict[LLMInterview, pd.DataFrame]:
+    """
+    Filter and aggregate the logprobs that are returned when using the Logprob_AnswerProductionMethod
+
+    Args:
+        survey_results: List of InterviewResult that is returned from running a survey
+        allowed_choices: List of possible answer options OR dictionary that maps answer options to multiple tokens that encode each option
+    """
+    final_result = {}
+
+    # if each choice only maps to one token
+    if isinstance(allowed_choices, list):
+        allowed_choices = {c: [c] for c in allowed_choices}
+
+    for survey_result in survey_results:
+        answers = []
+        for item_id, qa_tuple in survey_result.results.items():
+            filtered_logprobs = _logprobs_filter(qa_tuple.logprobs, allowed_choices)
+            answer_format = filtered_logprobs.keys()
+            answers.append((item_id, qa_tuple.question, *filtered_logprobs.values()))
+        
+        df = pd.DataFrame(
+                answers,
+                columns=[constants.INTERVIEW_ITEM_ID, constants.QUESTION, *answer_format],
+            )
+        final_result[survey_result.interview] = df
+
+    return final_result
