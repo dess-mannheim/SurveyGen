@@ -236,11 +236,11 @@ def _filter_logprobs_by_choices(
     # check for each output token whether any of the choices start with this token
     for token in logprob_df['token']:
         boolean_index = choices.str.startswith(token)
-        if len(choices[boolean_index]) > 1:
-            warnings.warn(
-                f"Multiple allowed_choices ({list(choices[boolean_index])}) match the same output token: {token}",
-                stacklevel=2
-            )
+        #if len(choices[boolean_index]) > 1:
+        #    warnings.warn(
+        #        f"Multiple allowed_choices ({list(choices[boolean_index])}) match the same output token: {token}",
+        #        stacklevel=2
+        #    )
         matches_found.append(boolean_index.any())
     
     return logprob_df[matches_found]
@@ -257,8 +257,9 @@ def _logprobs_filter(
     logprob_df = logprob_df[logprob_df.prob > 0]
 
     # flatten to check for collisions between answer options
-    all_valid_outputs = [output for choices in allowed_choices.values() for output in choices]
-    _ = _filter_logprobs_by_choices(logprob_df, pd.Series(all_valid_outputs))
+    # TODO: implement this properly---only collisions between answer options matter, not, e.g., TRUMP vs. trump!    
+    #all_valid_outputs = [output for choices in allowed_choices.values() for output in choices]
+    #_ = _filter_logprobs_by_choices(logprob_df, pd.Series(all_valid_outputs))
 
     # filter the individual survey answers
     choice_results = {}

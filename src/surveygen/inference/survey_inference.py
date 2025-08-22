@@ -171,10 +171,12 @@ def batch_generation(
     # TODO add argument to specify how many conversations should be printed (base argument should be reasonable)
     if print_conversation:
         conversation_print = "--- Conversation ---"
-        for system_message, prompt, answer in zip(system_messages, prompts, result):
+        if logprob_result is None:
+            logprob_result = [None]*len(result)
+        for system_message, prompt, answer, logprob_answer in zip(system_messages, prompts, result, logprob_result):
             round_print = f"{conversation_print}\n-- System Message --\n{system_message}\n-- User Message ---\n{prompt}\n-- Generated Message --\n{answer}"
             if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
-                round_print += '\n-- Logprobs --\n' + str(logprob_result)
+                round_print += '\n-- Logprobs --\n' + str(logprob_answer)
             tqdm.write(round_print)
             break
 
