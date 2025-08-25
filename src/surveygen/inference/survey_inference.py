@@ -24,6 +24,7 @@ from .answer_production import (
 
 import json
 import random
+import regex as re
 
 from tqdm.auto import tqdm
 
@@ -43,6 +44,7 @@ def default_model_init(model_id: str, seed: int = 42, **model_keywords) -> LLM:
     random.seed(seed)
     torch.manual_seed(seed)
     print("Device_count: " + str(torch.cuda.device_count()))
+    print(model_keywords)
 
     return LLM(
         model=model_id,
@@ -80,6 +82,10 @@ def batch_generation(
     api_concurrency: int = 10,
     print_conversation: bool = False,
     print_progress: bool = True,
+    # <think>...</think> tokens are used by Qwen3 to separate reasoning
+    reasoning_start_token: str = "<think>",
+    reasoning_end_token: str = "</think>",
+    chat_template_kwargs: Dict[str, Any] = {},
     **generation_kwargs: Any,
 ):
     """
@@ -101,6 +107,8 @@ def batch_generation(
         api_concurrency: Max concurrent API requests
         print_conversation: If True, prints conversations
         print_progress: If True, shows progress bar
+        reasoning_start_token: Special token at the beginning of reasoning models' output
+        reasoning_end_token: Special token to separate reasoning from regular model output
         **generation_kwargs: Additional generation parameters
 
     Returns:
@@ -139,6 +147,7 @@ def batch_generation(
             batch_messages,
             sampling_params=sampling_params_list,
             use_tqdm=print_progress,
+            chat_template_kwargs=chat_template_kwargs
         )
         result = [output.outputs[0].text for output in outputs]
         if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
@@ -153,6 +162,21 @@ def batch_generation(
                 except IndexError: # less than [logprob_position] tokens in the output!
                     answer_dict = {}
                 logprob_result.append(answer_dict)
+        
+        # separate out reasoning
+        # we parse this here because the OpenAI API separates it automatically
+        plain_results = []
+        reasoning_output = []
+        for output_text in result:
+            reasoning_match = re.search(reasoning_start_token + r"(.*?)" + reasoning_end_token, output_text, re.DOTALL)
+            reasoning_output.append(reasoning_match.group(1).strip() if reasoning_match else None)
+            plain_results.append(output_text.split(reasoning_end_token)[-1].strip())
+
+        # print the first result returned from vllm
+        #if print_conversation:
+        #    for req_output in outputs:
+        #        print(req_output.outputs[0])
+        #        break
 
     else:
         # TODO: add support for List[AnswerProductionMethod]
@@ -162,7 +186,7 @@ def batch_generation(
             generation_kwargs["logprobs"] = True
             generation_kwargs["top_logprobs"] = answer_production_method.top_logprobs
 
-        result = _run_async_in_thread(
+        plain_results = _run_async_in_thread(
             client=model,
             client_model_name=client_model_name,
             batch_messages=batch_messages,
@@ -172,19 +196,24 @@ def batch_generation(
             **generation_kwargs,
         )
 
+        # TODO: handle reasoning
+        reasoning_output = [None] * len(plain_results)
+
     # TODO add argument to specify how many conversations should be printed (base argument should be reasonable)
     if print_conversation:
         conversation_print = "--- Conversation ---"
         if logprob_result is None:
-            logprob_result = [None]*len(result)
-        for system_message, prompt, answer, logprob_answer in zip(system_messages, prompts, result, logprob_result):
+            logprob_result = [None]*len(plain_results)
+        for system_message, prompt, answer, reasoning, logprob_answer in zip(system_messages, prompts, plain_results, reasoning_output, logprob_result):
             round_print = f"{conversation_print}\n-- System Message --\n{system_message}\n-- User Message ---\n{prompt}\n-- Generated Message --\n{answer}"
+            if reasoning is not None:
+                round_print += "\n-- Reasoning --\n" + str(reasoning)
             if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
                 round_print += '\n-- Logprobs --\n' + str(logprob_answer)
             tqdm.write(round_print)
             break
 
-    return (result, logprob_result)
+    return (plain_results, logprob_result, reasoning_output)
 
 
 def _make_cache_key(fields: Any, constraints: Any) -> str:

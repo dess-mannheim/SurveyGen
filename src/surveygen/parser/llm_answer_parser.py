@@ -50,7 +50,7 @@ def json_parse_all(survey_results: List[InterviewResult]) -> Dict[LLMInterview, 
         for key, value in survey_result.results.items():
             # value:QuestionAnswerTuple
             parsed_llm_response = json_parser_str(value.llm_response)
-            if parsed_llm_response is not None:
+            if isinstance(parsed_llm_response, dict):
                 answer_format = parsed_llm_response.keys()
                 answers.append((key, value.question, *parsed_llm_response.values()))
             else:
@@ -201,7 +201,7 @@ def llm_parse_all(
         system_messages = [system_prompt] * len(all_prompts)
 
         # Perform the single, efficient batch inference.
-        llm_parsed_results, logprobs = batch_generation(
+        llm_parsed_results, logprobs, reasoning_output = batch_generation(
             model,
             system_messages = system_messages,
             prompts = all_prompts,
@@ -209,6 +209,7 @@ def llm_parse_all(
             seed = seed,
             print_conversation = print_conversation,
             print_progress = print_progress,
+            chat_template_kwargs = {'enable_thinking': False}, # disable reasoning to facilitate parsing
             **generation_kwargs,
         )
 

@@ -359,6 +359,7 @@ def conduct_survey_question_by_question(
     n_save_step: Optional[int] = None,
     intermediate_save_file: Optional[str] = None,
     seed: int = 42,
+    chat_template_kwargs: Dict[str, Any] = {},
     **generation_kwargs: Any,
 ) -> List[InterviewResult]:
     """
@@ -375,6 +376,7 @@ def conduct_survey_question_by_question(
         n_save_step: Save intermediate results every n steps.
         intermediate_save_file: Path to save intermediate results.
         seed: Random seed for reproducibility.
+        chat_template_kwargs: Arguments to pass to the chat template, e.g., to disable reasoning
         **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or  client.chat.completions.create().
 
     Returns:
@@ -456,7 +458,7 @@ def conduct_survey_question_by_question(
             for inference in current_batch
         ]
 
-        output, logprobs = batch_generation(
+        output, logprobs, reasoning_output = batch_generation(
             model=model,
             system_messages=system_messages,
             prompts=prompts,
@@ -466,17 +468,18 @@ def conduct_survey_question_by_question(
             print_conversation=print_conversation,
             print_progress=print_progress,
             seed=seed,
+            chat_template_kwargs=chat_template_kwargs,
             **generation_kwargs,
         )
 
         # avoid errors when zipping
         if logprobs is None: logprobs = [None] * len(current_batch)
 
-        for survey_id, question, answer, logprob_answer, item in zip(
-            range(len(current_batch)), questions, output, logprobs, current_batch
+        for survey_id, question, answer, logprob_answer, reasoning, item in zip(
+            range(len(current_batch)), questions, output, logprobs, reasoning_output, current_batch
         ):
             question_llm_response_pairs[survey_id].update(
-                {item.order[i]: QuestionLLMResponseTuple(question, answer, logprob_answer)}
+                {item.order[i]: QuestionLLMResponseTuple(question, answer, logprob_answer, reasoning)}
             )
 
         # TODO: check that this works with logprobs
@@ -548,6 +551,7 @@ def conduct_whole_survey_one_prompt(
     print_conversation: bool = False,
     print_progress: bool = True,
     seed: int = 42,
+    chat_template_kwargs: Dict[str, Any] = {},
     **generation_kwargs: Any,
 ) -> List[InterviewResult]:
     """
@@ -564,6 +568,7 @@ def conduct_whole_survey_one_prompt(
         print_conversation: If True, prints the conversation.
         print_progress: If True, shows progress bar.
         seed: Random seed for reproducibility.
+        chat_template_kwargs: Arguments to pass to the chat template, e.g., to disable reasoning
         **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or  client.chat.completions.create().
 
     Returns:
@@ -639,7 +644,7 @@ def conduct_whole_survey_one_prompt(
             system_messages = [inference.system_prompt for inference in current_batch]
         prompts = [inference.create_all_questions() for inference in current_batch]
 
-        output, logprobs = batch_generation(
+        output, logprobs, reasoning_output = batch_generation(
             model=model,
             system_messages=system_messages,
             prompts=prompts,
@@ -649,6 +654,7 @@ def conduct_whole_survey_one_prompt(
             print_conversation=print_conversation,
             print_progress=print_progress,
             seed=seed,
+            chat_template_kwargs=chat_template_kwargs,
             **generation_kwargs,
         )
 

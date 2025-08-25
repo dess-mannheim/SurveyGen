@@ -48,7 +48,8 @@ class AnswerOptions:
 class QuestionLLMResponseTuple(NamedTuple):
     question: str
     llm_response: str
-    logprobs: Dict[str, float]
+    logprobs: Optional[Dict[str, float]]
+    reasoning: Optional[str]
 
 
 @dataclass
