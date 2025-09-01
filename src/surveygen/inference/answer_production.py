@@ -106,7 +106,7 @@ class Logprob_AnswerProductionMethod(AnswerProductionMethod):
 
 # --- Specific Answer Production Methods ---
 
-def _get_valid_outputs(answer_options: AnswerOptions, output_index_only: bool = False) -> List[str]:
+def get_valid_outputs(answer_options: AnswerOptions, output_index_only: bool = False) -> List[str]:
         if output_index_only:
             if answer_options.index is not None:
                 return [str(i) for i in answer_options.index]
@@ -126,7 +126,7 @@ class StructuredOutput_SingleAnswer(JSON_AnswerProductionMethod):
         """Answer Production Method: Structured Outputs"""
         # constrain output to the same answer options for every question
         # TODO: allow for varying answer_options
-        options = _get_valid_outputs(answer_options, output_index_only)
+        options = get_valid_outputs(answer_options, output_index_only)
 
         super().__init__(
             json_fields = {"answer": ", ".join(options)},
@@ -141,7 +141,7 @@ class StructuredOutput_Reasoning(JSON_AnswerProductionMethod):
     def __init__(self, answer_options: AnswerOptions, automatic_system_prompt: bool = True, output_index_only: bool = False):
         """Answer Production Method: Structured Outputs with Reasoning"""
         # TODO: allow for varying answer_options
-        options = _get_valid_outputs(answer_options, output_index_only)
+        options = get_valid_outputs(answer_options, output_index_only)
 
         json_fields = {
             "reasoning": "your reasoning about the answer options",
@@ -161,7 +161,7 @@ class StructuredOutput_AllOptions(JSON_AnswerProductionMethod):
     def __init__(self, answer_options: AnswerOptions, automatic_system_prompt: bool = True, output_index_only: bool = False):
         """Answer Production Method: Structured Outputs All Options"""
         # TODO: allow for varying answer_options
-        options = _get_valid_outputs(answer_options, output_index_only)
+        options = get_valid_outputs(answer_options, output_index_only)
 
         super().__init__(
             json_fields = {_option: "probability" for _option in options},

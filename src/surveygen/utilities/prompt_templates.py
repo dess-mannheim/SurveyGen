@@ -64,3 +64,20 @@ You only respond with a probability for each answer option in the following JSON
 
 SYSTEM_SINGLE_ANSWER: Final[str] = """These are the possible answer options: [{options}].
 You only respond with the most probable answer option."""
+
+# German versions
+
+DE_SYSTEM_JSON_DEFAULT: Final[str] = """Du antwortest ausschließlich im folgenden JSON-Format:"""
+
+DE_SYSTEM_JSON_SINGLE_ANSWER: Final[str] = """Dies sind die möglichen Antwortoptionen: [{options}].
+Du antwortest ausschließlich mit der wahrscheinlichsten Antwortoption im folgenden JSON-Format:"""
+
+DE_SYSTEM_JSON_REASONING: Final[str] = """Dies sind die möglichen Antwortoptionen: [{options}].
+Du argumentierst immer zuerst über die möglichen Antwort-Optionen.
+Du antwortest mit deiner Argumentation und der wahrscheinlichsten Antwort-Option im folgenden JSON-Format:"""
+
+DE_SYSTEM_JSON_ALL_OPTIONS: Final[str] = """Dies sind die möglichen Antwortoptionen: [{options}].
+Du antwortest ausschließlich mit einer Wahrscheinlichkeit für jede Antwort-Option im folgenden JSON-Format:"""
+
+DE_SYSTEM_SINGLE_ANSWER: Final[str] = """Dies sind die möglichen Antwortoptionen: [{options}].
+Du antwortest ausschließlich mit der wahrscheinlichsten Antwortoption."""
