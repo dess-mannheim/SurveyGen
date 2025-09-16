@@ -77,8 +77,10 @@ class Logprob_AnswerProductionMethod(AnswerProductionMethod):
     def __init__(
             self,
             token_position: int = 0,
+            token_limit: int = 1,
             top_logprobs: int = 20, # the OpenAI API default, local vllm deployments might give you more
             allowed_choices: Optional[List[str]] = None,
+            ignore_reasoning: bool = True,
             automatic_system_prompt: bool = False,
             system_prompt_template: str = prompt_templates.SYSTEM_SINGLE_ANSWER,
             output_index_only: bool = False
@@ -88,16 +90,20 @@ class Logprob_AnswerProductionMethod(AnswerProductionMethod):
         
         Attributes:
             token_position: At which position in the output to capture the logprobs, use `0` for first-token probabilities (default)
+            token_limit: Overwrite the number of output tokens, e.g., only produce a single token for first-token probabilities (default)
             top_logprobs: How many of the logprobs to consider, OpenAI supports at most 20
             allowed_choices: If not None, restrict output additionally with `guided_choice`
+            ignore_reasoning: If True, only consider tokens after the reasoning output, i.e., after </think>
             automatic_system_prompt: If a instruction to only output in the required json format should be added to the system prompt
             system_prompt_template: Template to use for formatting the system prompt, e.g., from `..utilities.prompt_templates`
             output_index_only: If True, constrain output to answer option index rather then the full text of each answer option
         """
         super().__init__()
         self.token_position = token_position
+        self.token_limit = token_limit
         self.top_logprobs = top_logprobs
         self.allowed_choices = allowed_choices # same name enables re-using code from Choice_AnswerProductionMethod
+        self.ignore_reasoning = ignore_reasoning
         self.automatic_system_prompt = automatic_system_prompt
         self.system_prompt_template = system_prompt_template
         self.output_index_only = output_index_only # TODO: implement

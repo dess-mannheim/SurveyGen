@@ -85,6 +85,7 @@ def batch_generation(
     # <think>...</think> tokens are used by Qwen3 to separate reasoning
     reasoning_start_token: str = "<think>",
     reasoning_end_token: str = "</think>",
+    space_char: str = "Ġ",
     chat_template_kwargs: Dict[str, Any] = {},
     **generation_kwargs: Any,
 ):
@@ -109,6 +110,7 @@ def batch_generation(
         print_progress: If True, shows progress bar
         reasoning_start_token: Special token at the beginning of reasoning models' output
         reasoning_end_token: Special token to separate reasoning from regular model output
+        space_token: Special char to encode spaces in tokens ("Ġ" for most byte-pair tokenizers)
         **generation_kwargs: Additional generation parameters
 
     Returns:
@@ -135,7 +137,9 @@ def batch_generation(
         # TODO: add support for List[AnswerProductionMethod]
         if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
             generation_kwargs["logprobs"] = answer_production_method.top_logprobs
-            generation_kwargs["max_tokens"] = answer_production_method.token_position + 1
+            # set token limit separately to support reasoning models
+            if answer_production_method.token_limit is not None:
+                generation_kwargs["max_tokens"] = answer_production_method.token_limit
 
         sampling_params_list = _create_sampling_params(
             batch_size=batch_size,
@@ -150,18 +154,6 @@ def batch_generation(
             chat_template_kwargs=chat_template_kwargs
         )
         result = [output.outputs[0].text for output in outputs]
-        if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
-            logprob_result = []
-            for req_output in outputs:
-                logprob_position = answer_production_method.token_position
-                try:
-                    answer_dict = {
-                        x.decoded_token: x.logprob
-                        for x in req_output.outputs[0].logprobs[logprob_position].values()
-                    }
-                except IndexError: # less than [logprob_position] tokens in the output!
-                    answer_dict = {}
-                logprob_result.append(answer_dict)
         
         # separate out reasoning
         # we parse this here because the OpenAI API separates it automatically
@@ -171,6 +163,30 @@ def batch_generation(
             reasoning_match = re.search(reasoning_start_token + r"(.*?)" + reasoning_end_token, output_text, re.DOTALL)
             reasoning_output.append(reasoning_match.group(1).strip() if reasoning_match else None)
             plain_results.append(output_text.split(reasoning_end_token)[-1].strip())
+        
+        if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
+            # ignore the first k tokens that belong to the reasoning
+            if answer_production_method.ignore_reasoning:
+                tokenizer = model.get_tokenizer()
+                logprob_positions = [
+                    len(tokenizer.tokenize(f'{reasoning_start_token}{_reasoning}{reasoning_end_token}')) + 1 + max(1, answer_production_method.token_position)
+                    if _reasoning is not None
+                    else answer_production_method.token_position
+                    for _reasoning in reasoning_output
+                ]
+            else:
+                logprob_positions = [answer_production_method.token_position] * len(outputs)
+            
+            logprob_result = []
+            for req_output, logprob_position in zip(outputs, logprob_positions):
+                try:
+                    answer_dict = {
+                        x.decoded_token.lstrip(space_char): x.logprob # strip the space character from tokenization
+                        for x in req_output.outputs[0].logprobs[logprob_position].values()
+                    }
+                except IndexError: # less than [logprob_position] tokens in the output!
+                    answer_dict = {}
+                logprob_result.append(answer_dict)
 
         # print the first result returned from vllm
         #if print_conversation:
