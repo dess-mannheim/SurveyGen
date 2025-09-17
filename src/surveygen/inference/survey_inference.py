@@ -159,8 +159,10 @@ def batch_generation(
         # we parse this here because the OpenAI API separates it automatically
         plain_results = []
         reasoning_output = []
+        raw_reasonings = [] # keep the whitespace for length calculations
         for output_text in result:
             reasoning_match = re.search(reasoning_start_token + r"(.*?)" + reasoning_end_token, output_text, re.DOTALL)
+            raw_reasonings.append(reasoning_match.group(1) if reasoning_match else None)
             reasoning_output.append(reasoning_match.group(1).strip() if reasoning_match else None)
             plain_results.append(output_text.split(reasoning_end_token)[-1].strip())
         
@@ -172,7 +174,7 @@ def batch_generation(
                     len(tokenizer.tokenize(f'{reasoning_start_token}{_reasoning}{reasoning_end_token}')) + 1 + answer_production_method.token_position
                     if _reasoning is not None
                     else answer_production_method.token_position
-                    for _reasoning in reasoning_output
+                    for _reasoning in raw_reasonings
                 ]
             else:
                 logprob_positions = [answer_production_method.token_position] * len(outputs)
@@ -181,7 +183,7 @@ def batch_generation(
             for req_output, logprob_position in zip(outputs, logprob_positions):
                 try:
                     answer_dict = {
-                        x.decoded_token.lstrip(space_char): x.logprob # strip the space character from tokenization
+                        x.decoded_token.lstrip(space_char).lstrip(): x.logprob # strip the space character and whitespace from tokenization
                         for x in req_output.outputs[0].logprobs[logprob_position].values()
                     }
                 except IndexError: # less than [logprob_position] tokens in the output!
