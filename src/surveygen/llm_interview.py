@@ -37,7 +37,7 @@ class LLMInterview:
     --------------
     ```python
     interview = LLMInterview(interview_path="questions.csv")
-    interview.prepare_interview(question_stem="Do you thing QUESTION_CONTENT_PLACEHOLDER is good?", answer_options=AnswerOptions(...))
+    interview.prepare_interview(question_stem="Do you think QUESTION_CONTENT_PLACEHOLDER is good?", answer_options=AnswerOptions(...))
     prompt = interview.get_prompt_structure()
     print(prompt)
     ```
@@ -54,7 +54,8 @@ class LLMInterview:
 
     def __init__(
         self,
-        interview_path: str,
+        interview_path: Optional[str] = None,
+        interview_dataframe: Optional[pd.DataFrame] = None,
         interview_name: str = DEFAULT_INTERVIEW_ID,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         interview_instruction: str = DEFAULT_TASK_INSTRUCTION,
@@ -62,10 +63,11 @@ class LLMInterview:
         seed: int = 42,
     ):
         """
-        Initialize an LLMInterview instance.
+        Initialize an LLMInterview instance. Either a path to a csv file or a pandas dataframe has to be provided
 
         Args:
             interview_path (str): Path to the CSV file containing the interview structure and questions.
+            interview_dataframe (pd.Dataframe): A pandas dataframe interview structure and questions.
             interview_name (str): Name/ID for the interview.
             system_prompt (str): System prompt to prepend to all questions.
             interview_instruction (str): Instructions that will be given to the model before asking the questions.
@@ -73,7 +75,15 @@ class LLMInterview:
             seed (int): Random seed for reproducibility.
         """
         random.seed(seed)
-        self.load_interview_format(interview_path=interview_path)
+
+        if interview_path == None and interview_dataframe is None:
+            raise ValueError("Either a path or a dataframe have to be provided")
+
+        if interview_dataframe is None:
+            self.load_interview_format(interview_path=interview_path)
+        else:
+            self.load_interview_format(interview_dataframe=interview_dataframe)
+        
         self.verbose: bool = verbose
 
         self.interview_name: str = interview_name
@@ -177,7 +187,7 @@ class LLMInterview:
         """
         return self._questions
 
-    def load_interview_format(self, interview_path: str) -> Self:
+    def load_interview_format(self, interview_path: Optional[str] = None, interview_dataframe: Optional[pd.DataFrame] = None) -> Self:
         """
         Load interview questions from a CSV file.
 
@@ -192,7 +202,13 @@ class LLMInterview:
         """
         interview_questions: List[InterviewItem] = []
 
-        df = pd.read_csv(interview_path)
+        if interview_path == None and interview_dataframe is None:
+            raise ValueError("Either a path or a dataframe have to be provided")
+
+        if interview_dataframe is not None:
+            df = interview_dataframe
+        else:
+            df = pd.read_csv(interview_path)
 
         for _, row in df.iterrows():
             interview_item_id = row[constants.INTERVIEW_ITEM_ID]
@@ -271,12 +287,17 @@ class LLMInterview:
 
         options_dict = False
 
-        if isinstance(answer_options, AnswerOptions):
+        if answer_options == None:
+            self._global_options = None
+        elif isinstance(answer_options, AnswerOptions):
             options_dict = False
             if global_options:
                 self._global_options = answer_options
+            else:
+                self._global_options = None
         elif isinstance(answer_options, Dict):
             options_dict = True
+            self._global_options = None
 
         updated_questions: List[InterviewItem] = []
 
@@ -365,20 +386,21 @@ class LLMInterview:
         Returns:
             str: The formatted prompt for the question.
         """
-        if constants.QUESTION_CONTENT_PLACEHOLDER in interview_question.question_stem:
-            question_prompt = interview_question.question_stem.format(
-                **{
-                    constants.QUESTION_CONTENT_PLACEHOLDER: interview_question.question_content
-                }
-            )
+        if interview_question.question_stem:
+            if constants.QUESTION_CONTENT_PLACEHOLDER in interview_question.question_stem:
+                question_prompt = interview_question.question_stem.format(
+                    **{
+                        constants.QUESTION_CONTENT_PLACEHOLDER: interview_question.question_content
+                    }
+                )
+            else:
+                question_prompt = f"""{interview_question.question_stem} {interview_question.question_content}"""
         else:
-            question_prompt = f"""{interview_question.question_stem} {interview_question.question_content}"""
-
+             question_prompt = f"""{interview_question.question_content}"""
         if interview_question.answer_options:
             options_prompt = interview_question.answer_options.create_options_str()
             question_prompt = f"""{question_prompt} 
 {options_prompt}"""
-
         return question_prompt
 
     def _generate_inference_options(

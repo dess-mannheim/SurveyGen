@@ -65,6 +65,8 @@ from openai import AsyncOpenAI
 from pathlib import Path
 import os
 
+import pandas as pd
+
 import random
 
 import tqdm
@@ -811,6 +813,50 @@ def conduct_survey_in_context(
         survey_results.append(InterviewResult(survey, question_llm_response[i]))
 
     return survey_results
+
+class SurveyCreator:
+    @classmethod
+    def from_path(self, survey_path: str, questionnaire_path: str) -> List[LLMInterview]:
+        """
+        Generates LLMInterview objects from a CSV file path.
+
+        Args:
+            survey_path: The path to the CSV file.
+
+        Returns:
+            A list of LLMInterview objects.
+        """
+        df = pd.read_csv(survey_path)
+        df_questionnaire = pd.read_csv(questionnaire_path)
+        return self._from_dataframe(df, df_questionnaire)
+
+    @classmethod
+    def from_dataframe(self, survey_dataframe: pd.DataFrame, questionnaire_dataframe: pd.DataFrame) -> List[LLMInterview]:
+        """
+        Generates LLMInterview objects from a pandas DataFrame.
+
+        Args:
+            survey_dataframe: A DataFrame containing the survey data.
+
+        Returns:
+            A list of LLMInterview objects.
+        """
+        return self._from_dataframe(survey_dataframe, questionnaire_dataframe)
+
+    @classmethod
+    def _create_interview(self, row: pd.Series, df_questionnaire) -> LLMInterview:
+        """
+        Internal helper method to process the DataFrame.
+        """
+        return LLMInterview(interview_dataframe=df_questionnaire, interview_name=row[constants.INTERVIEW_NAME], system_prompt=row[constants.SYSTEM_PROMPT_FIELD], interview_instruction=row[constants.INTERVIEW_INSTRUCTION_FIELD])
+        
+    @classmethod
+    def _from_dataframe(self, df: pd.DataFrame, df_questionnaire: pd.DataFrame) -> List[LLMInterview]:
+        """
+        Internal helper method to process the DataFrame.
+        """
+        interviews = df.apply(lambda row: self._create_interview(row, df_questionnaire), axis=1)
+        return interviews.to_list()
 
 
 if __name__ == "__main__":
