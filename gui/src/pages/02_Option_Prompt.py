@@ -193,6 +193,6 @@ if submitted:
         )
 
         st.session_state.survey_options = survey_options
-        st.switch_page("pages/preparepage.py")
+        st.switch_page("pages/03_Prepare_Prompts.py")
 
 

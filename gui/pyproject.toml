@@ -7,3 +7,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "surveyGenGui"
 version = "0.0.1"
+
+dependencies = [
+    streamlit
+]

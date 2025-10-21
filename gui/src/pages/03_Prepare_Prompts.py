@@ -146,8 +146,6 @@ if "survey_options" in st.session_state:
 else:
     survey_options = None
 
-survey_options
-
 if randomize_order_bool:
     st.session_state.temporary_interview.prepare_interview(
         question_stem=question_stem_input,
@@ -178,4 +176,11 @@ with col2:
 st.divider()
 
 if st.button("Confirm and Prepare Interview", type="primary", use_container_width=True):
-    pass
+    for interview in st.session_state.interviews:
+        interview.prepare_interview(
+            question_stem=question_stem_input,
+            answer_options=survey_options,
+            global_options=global_options_bool,
+            randomized_item_order=randomize_order_bool,
+        )
+    st.success("Changed the prompts!")
