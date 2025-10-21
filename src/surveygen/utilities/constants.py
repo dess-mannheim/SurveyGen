@@ -3,6 +3,8 @@ from typing import Final, List, Dict
 from enum import Enum
 
 # Survey Item
+SYSTEM_PROMPT_FIELD: Final[str] = "system_prompt"
+INTERVIEW_INSTRUCTION_FIELD: Final[str] = "interview_instruction"
 INTERVIEW_ITEM_ID: Final[str] = "interview_item_id"
 INTERVIEW_ITEM: Final[str] = "interview_item"
 INTERVIEW_NAME: Final[str] = "interview_name"
