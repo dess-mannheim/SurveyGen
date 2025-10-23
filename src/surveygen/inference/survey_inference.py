@@ -15,11 +15,11 @@ from openai.types.chat import ChatCompletion
 from typing import Any, List, Optional, Union, Dict, Literal
 
 from .dynamic_pydantic import generate_pydantic_model
-from .answer_production import (
-    AnswerProductionMethod,
-    JSON_AnswerProductionMethod,
-    Choice_AnswerProductionMethod,
-    Logprob_AnswerProductionMethod
+from .response_generation import (
+    ResponseGenerationMethod,
+    JSONResponseGenerationMethod,
+    ChoiceResponseGenerationMethod,
+    LogprobResponseGenerationMethod
 )
 
 import json
@@ -111,8 +111,8 @@ def batch_generation(
     model: Union[LLM, AsyncOpenAI],
     system_messages: List[str] = ["You are a helpful assistant."],
     prompts: List[str] = ["Hi there! What is your name?"],
-    answer_production_method: Optional[
-        Union[AnswerProductionMethod, List[AnswerProductionMethod]]
+    response_generation_method: Optional[
+        Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
     ] = None,
     seed: int = 42,
     client_model_name: Optional[str] = None,
@@ -172,16 +172,16 @@ def batch_generation(
 
     if isinstance(model, LLM):
         # TODO: add support for List[AnswerProductionMethod]
-        if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
-            generation_kwargs["logprobs"] = answer_production_method.top_logprobs
+        if isinstance(response_generation_method, LogprobResponseGenerationMethod):
+            generation_kwargs["logprobs"] = response_generation_method.top_logprobs
             # set token limit separately to support reasoning models
-            if answer_production_method.token_limit is not None:
-                generation_kwargs["max_tokens"] = answer_production_method.token_limit
+            if response_generation_method.token_limit is not None:
+                generation_kwargs["max_tokens"] = response_generation_method.token_limit
 
         sampling_params_list = _create_sampling_params(
             batch_size=batch_size,
             seeds=seeds,
-            answer_production_method=answer_production_method,
+            response_generation_method=response_generation_method,
             **generation_kwargs,
         )
         outputs: List[RequestOutput] = model.chat(
@@ -203,18 +203,18 @@ def batch_generation(
             reasoning_output.append(reasoning_match.group(1).strip() if reasoning_match else None)
             plain_results.append(output_text.split(reasoning_end_token)[-1].strip())
         
-        if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
+        if isinstance(response_generation_method, LogprobResponseGenerationMethod):
             # ignore the first k tokens that belong to the reasoning
-            if answer_production_method.ignore_reasoning:
+            if response_generation_method.ignore_reasoning:
                 tokenizer = model.get_tokenizer()
                 logprob_positions = [
-                    len(tokenizer.tokenize(f'{reasoning_start_token}{_reasoning}{reasoning_end_token}')) + 1 + answer_production_method.token_position
+                    len(tokenizer.tokenize(f'{reasoning_start_token}{_reasoning}{reasoning_end_token}')) + 1 + response_generation_method.token_position
                     if _reasoning is not None
-                    else answer_production_method.token_position
+                    else response_generation_method.token_position
                     for _reasoning in raw_reasonings
                 ]
             else:
-                logprob_positions = [answer_production_method.token_position] * len(outputs)
+                logprob_positions = [response_generation_method.token_position] * len(outputs)
             
             logprob_result = []
             for req_output, logprob_position in zip(outputs, logprob_positions):
@@ -235,11 +235,11 @@ def batch_generation(
 
     else:
         # TODO: add support for List[AnswerProductionMethod]
-        if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
+        if isinstance(response_generation_method[0], LogprobResponseGenerationMethod):
             raise NotImplementedError("The Logprob_AnswerProductionMethod is not yet implemented " + \
                                       "for use with the OpenAI API. Use vllm offline inference instead.")
             generation_kwargs["logprobs"] = True
-            generation_kwargs["top_logprobs"] = answer_production_method.top_logprobs
+            generation_kwargs["top_logprobs"] = response_generation_method.top_logprobs
 
         plain_results = _run_async_in_thread(
             client=model,
@@ -247,39 +247,44 @@ def batch_generation(
             batch_messages=batch_messages,
             seeds=seeds,
             concurrency_limit=api_concurrency,
-            answer_production_method=answer_production_method,
+            answer_production_method=response_generation_method,
             **generation_kwargs,
         )
 
         # TODO: handle reasoning
         reasoning_output = [None] * len(plain_results)
 
+    if logprob_result is None:
+        logprob_result = [None] * len(plain_results)
+
     # TODO add argument to specify how many conversations should be printed (base argument should be reasonable)
     if print_conversation:
         conversation_print = "--- Conversation ---"
-        if logprob_result is None:
-            logprob_result = [None]*len(plain_results)
         for system_message, prompt, answer, reasoning, logprob_answer in zip(system_messages, prompts, plain_results, reasoning_output, logprob_result):
             round_print = f"{conversation_print}\n-- System Message --\n{system_message}\n-- User Message ---\n{prompt}\n-- Generated Message --\n{answer}"
             if reasoning is not None:
                 round_print += "\n-- Reasoning --\n" + str(reasoning)
-            if isinstance(answer_production_method, Logprob_AnswerProductionMethod):
+            if isinstance(response_generation_method, LogprobResponseGenerationMethod):
                 round_print += '\n-- Logprobs --\n' + str(logprob_answer)
             tqdm.write(round_print)
-            break
+            
 
     return (plain_results, logprob_result, reasoning_output)
 
 
 def _make_cache_key(fields: Any, constraints: Any) -> str:
+    print(fields)
+    print(type(fields))
+    print(constraints)
+    print(type(constraints))
     return json.dumps({"fields": fields, "constraints": constraints}, sort_keys=False)
 
 
 def _create_sampling_params(
     batch_size: int,
     seeds: List[int],
-    answer_production_method: Optional[
-        Union[AnswerProductionMethod, List[AnswerProductionMethod]]
+    response_generation_method: Optional[
+        Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
     ],
     use_vllm: bool = True,
     **generation_kwargs: Any,
@@ -298,11 +303,11 @@ def _create_sampling_params(
         Sampling parameters for vLLM or API configuration
     """
 
-    if answer_production_method:
+    if response_generation_method:
         sampling_params_list = _structured_sampling_params(
             batch_size=batch_size,
             seeds=seeds,
-            answer_production_method=answer_production_method,
+            response_generation_method=response_generation_method,
             use_vllm=use_vllm,
             **generation_kwargs,
         )
@@ -320,8 +325,8 @@ def _create_sampling_params(
 def _structured_sampling_params(
     batch_size: int,
     seeds: List[int],
-    answer_production_method: Union[
-        AnswerProductionMethod, List[AnswerProductionMethod]
+    response_generation_method: Union[
+        ResponseGenerationMethod, List[ResponseGenerationMethod]
     ],
     use_vllm: bool = True,
     **generation_kwargs: Any,
@@ -329,11 +334,11 @@ def _structured_sampling_params(
     
     guided_decodings = []
 
-    if isinstance(answer_production_method, AnswerProductionMethod):
-        if isinstance(answer_production_method, JSON_AnswerProductionMethod):
+    if isinstance(response_generation_method, ResponseGenerationMethod):
+        if isinstance(response_generation_method, JSONResponseGenerationMethod):
             pydantic_model = generate_pydantic_model(
-                fields=answer_production_method.json_fields,
-                constraints=answer_production_method.constraints,
+                fields=response_generation_method.json_fields,
+                constraints=response_generation_method.constraints,
             )
             json_schema = pydantic_model.model_json_schema()
             if use_vllm:
@@ -341,9 +346,9 @@ def _structured_sampling_params(
                 guided_decodings = [global_guided_decoding] * batch_size
             else:
                 guided_decodings = [json_schema] * batch_size
-        elif (isinstance(answer_production_method, (Choice_AnswerProductionMethod, Logprob_AnswerProductionMethod))
-                  and answer_production_method.allowed_choices is not None):
-            _allowed_choices = [str(c) for c in answer_production_method.allowed_choices]
+        elif (isinstance(response_generation_method, (ChoiceResponseGenerationMethod, LogprobResponseGenerationMethod))
+                  and response_generation_method.allowed_choices is not None):
+            _allowed_choices = [str(c) for c in response_generation_method.allowed_choices]
             if use_vllm:
                 global_guided_decoding = GuidedDecodingParams(choice=_allowed_choices)
                 guided_decodings = [global_guided_decoding] * batch_size
@@ -353,11 +358,10 @@ def _structured_sampling_params(
     else:
         guided_decodings = []
         cache: Dict[str, GuidedDecodingParams] = {}
-
         for i in range(batch_size):
-            if isinstance(answer_production_method[i], JSON_AnswerProductionMethod):
-                fields = answer_production_method[i].json_fields
-                cons = answer_production_method[i].constraints
+            if isinstance(response_generation_method[i], JSONResponseGenerationMethod):
+                fields = response_generation_method[i].json_fields
+                cons = response_generation_method[i].constraints
 
                 key = _make_cache_key(fields, cons)
 
@@ -372,9 +376,9 @@ def _structured_sampling_params(
                         cache[key] = json_schema
 
                 guided_decodings.append(cache[key])
-            elif (isinstance(answer_production_method[i], (Choice_AnswerProductionMethod, Logprob_AnswerProductionMethod))
-                  and answer_production_method[i].allowed_choices is not None):
-                _allowed_choices = [str(c) for c in answer_production_method[i].allowed_choices]
+            elif (isinstance(response_generation_method[i], (ChoiceResponseGenerationMethod, LogprobResponseGenerationMethod))
+                  and response_generation_method[i].allowed_choices is not None):
+                _allowed_choices = [str(c) for c in response_generation_method[i].allowed_choices]
 
                 key = _make_cache_key(_allowed_choices, None)
 
@@ -384,6 +388,8 @@ def _structured_sampling_params(
                     else:
                         cache[key] = _allowed_choices
                 guided_decodings.append(cache[key])
+            else:
+                guided_decodings.append(None)
 
     if use_vllm and len(guided_decodings) == batch_size:
         sampling_params_list = [
@@ -410,14 +416,18 @@ def batch_turn_by_turn_generation(
     system_messages: List[str] = ["You are a helpful assistant."],
     prompts: List[List[str]] = [["Hi there! What is your name?", "Interesting"]],
     assistant_messages: List[List[str]] = None,
-    answer_production_method: Optional[
-        Union[AnswerProductionMethod, List[AnswerProductionMethod]]
+    response_generation_method: Optional[
+        Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
     ] = None,
     seed: int = 42,
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
     print_conversation: bool = False,
     print_progress: bool = True,
+    reasoning_start_token: str = "<think>",
+    reasoning_end_token: str = "</think>",
+    space_char: str = "Ġ",
+    chat_template_kwargs: Dict[str, Any] = {},
     **generation_kwargs,
 ) -> List[str]:
     """
@@ -476,28 +486,71 @@ def batch_turn_by_turn_generation(
         sampling_params_list = _create_sampling_params(
             batch_size=batch_size,
             seeds=seeds,
-            answer_production_method=answer_production_method,
+            response_generation_method=response_generation_method,
             **generation_kwargs,
         )
         outputs: List[RequestOutput] = model.chat(
             batch_messages,
             sampling_params=sampling_params_list,
             use_tqdm=print_progress,
+            chat_template_kwargs=chat_template_kwargs
         )
         # TODO: add support for logprobs
         result = [output.outputs[0].text for output in outputs]
 
+        # separate out reasoning
+        # we parse this here because the OpenAI API separates it automatically
+        plain_results = []
+        reasoning_output = []
+        raw_reasonings = [] # keep the whitespace for length calculations
+        logprob_result = []
+        for output_text in result:
+            reasoning_match = re.search(reasoning_start_token + r"(.*?)" + reasoning_end_token, output_text, re.DOTALL)
+            raw_reasonings.append(reasoning_match.group(1) if reasoning_match else None)
+            reasoning_output.append(reasoning_match.group(1).strip() if reasoning_match else None)
+            plain_results.append(output_text.split(reasoning_end_token)[-1].strip())
+        
+        if isinstance(response_generation_method, LogprobResponseGenerationMethod):
+            # ignore the first k tokens that belong to the reasoning
+            if response_generation_method.ignore_reasoning:
+                tokenizer = model.get_tokenizer()
+                logprob_positions = [
+                    len(tokenizer.tokenize(f'{reasoning_start_token}{_reasoning}{reasoning_end_token}')) + 1 + response_generation_method.token_position
+                    if _reasoning is not None
+                    else response_generation_method.token_position
+                    for _reasoning in raw_reasonings
+                ]
+            else:
+                logprob_positions = [response_generation_method.token_position] * len(outputs)
+            
+
+            for req_output, logprob_position in zip(outputs, logprob_positions):
+                try:
+                    answer_dict = {
+                        x.decoded_token.lstrip(space_char).lstrip(): x.logprob # strip the space character and whitespace from tokenization
+                        for x in req_output.outputs[0].logprobs[logprob_position].values()
+                    }
+                except IndexError: # less than [logprob_position] tokens in the output!
+                    answer_dict = {}
+                logprob_result.append(answer_dict)
+
+
     else:
-        result = _run_async_in_thread(
+        plain_results = _run_async_in_thread(
             client=model,
             client_model_name=client_model_name,
             batch_messages=batch_messages,
             seeds=seeds,
             concurrency_limit=api_concurrency,
-            answer_production_method=answer_production_method,
+            answer_production_method=response_generation_method,
             print_progress=print_progress,
             **generation_kwargs,
         )
+
+
+        # TODO: handle reasoning and logprobs
+        reasoning_output = [None] * len(plain_results)
+        logprob_result = [None] * len(plain_results)
 
     # TODO add argument to specify how many conversations should be printed
     if print_conversation:
@@ -516,9 +569,8 @@ def batch_turn_by_turn_generation(
                         )
             round_print = f"{round_print}\nGenerated Answer:\n{answer}"
             tqdm.write(round_print)
-            break
 
-    return result
+    return (plain_results, logprob_result, reasoning_output)
 
 
 def _run_async_in_thread(
@@ -529,7 +581,7 @@ def _run_async_in_thread(
     concurrency_limit: int = 10,
     print_progress: bool = True,
     answer_production_method: Optional[
-        Union[AnswerProductionMethod, List[AnswerProductionMethod]]
+        Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
     ] = None,
     **generation_kwargs,
 ):
@@ -538,7 +590,7 @@ def _run_async_in_thread(
     structured_output = _create_sampling_params(
         batch_size=len(batch_messages),
         seeds=seeds,
-        answer_production_method=answer_production_method,
+        response_generation_method=answer_production_method,
         use_vllm=False,
         **generation_kwargs,
     )
@@ -581,7 +633,7 @@ async def _run_api_batch_async(
     print_progress: bool = True,
     structured_output: List[Dict[str, Any]] = [],
     answer_production_method: Optional[
-        Union[AnswerProductionMethod, List[AnswerProductionMethod]]
+        Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
     ] = None,
     **generation_kwargs,
 ) -> List[str]:
@@ -602,7 +654,7 @@ async def _run_api_batch_async(
             }
 
             if answer_production_method:
-                if isinstance(answer_production_method, JSON_AnswerProductionMethod):
+                if isinstance(answer_production_method, JSONResponseGenerationMethod):
                     request_kwargs["response_format"] = {
                         "type": "json_schema",
                         "json_schema": {
@@ -610,7 +662,7 @@ async def _run_api_batch_async(
                             "schema": structured_output,
                         },
                     }
-                elif isinstance(answer_production_method, Choice_AnswerProductionMethod):
+                elif isinstance(answer_production_method, ChoiceResponseGenerationMethod):
                     #TODO: add warning if this is not running against vllm, i.e., guided_choice is not supported
                     request_kwargs["extra_body"] = {"guided_choice": structured_output}
 
@@ -650,7 +702,7 @@ def batch_decoding(
     prompts: List[str] = ["Hi there! What is your name?"],
     stop_tokens: List[str] = ["\nA:"],
     structured_output_options: Optional[
-        Union[AnswerProductionMethod, List[AnswerProductionMethod]]
+        Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
     ] = None,
     seed: int = 42,
     client_model_name: Optional[str] = None,

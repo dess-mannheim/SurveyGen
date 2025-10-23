@@ -52,13 +52,15 @@ class LLMInterview:
 
     DEFAULT_JSON_STRUCTURE: List[str] = ["reasoning", "answer"]
 
+    DEFAULT_PROMPT_STRUCTURE: str = "{interview_instruction}\n{questions}{options}"
+
     def __init__(
         self,
-        interview_path: Optional[str] = None,
-        interview_dataframe: Optional[pd.DataFrame] = None,
+        interview_source = Union[str, pd.DataFrame],
         interview_name: str = DEFAULT_INTERVIEW_ID,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         interview_instruction: str = DEFAULT_TASK_INSTRUCTION,
+        base_prompt_structure: str = DEFAULT_PROMPT_STRUCTURE,
         verbose=False,
         seed: int = 42,
     ):
@@ -76,14 +78,11 @@ class LLMInterview:
         """
         random.seed(seed)
 
-        if interview_path == None and interview_dataframe is None:
+        if interview_source is None:
             raise ValueError("Either a path or a dataframe have to be provided")
 
-        if interview_dataframe is None:
-            self.load_interview_format(interview_path=interview_path)
-        else:
-            self.load_interview_format(interview_dataframe=interview_dataframe)
-        
+        self.load_interview_format(interview_source=interview_source)
+
         self.verbose: bool = verbose
 
         self.interview_name: str = interview_name
@@ -91,7 +90,10 @@ class LLMInterview:
         self.system_prompt: str = system_prompt
         self.interview_instruction: str = interview_instruction
 
+        self.base_prompt_structure: str = base_prompt_structure
+
         self._global_options: AnswerOptions = None
+        self._same_options = False
 
     def duplicate(self):
         """
@@ -191,7 +193,7 @@ class LLMInterview:
         """
         return self._questions
 
-    def load_interview_format(self, interview_path: Optional[str] = None, interview_dataframe: Optional[pd.DataFrame] = None) -> Self:
+    def load_interview_format(self, interview_source: Union[str, pd.DataFrame]) -> Self:
         """
         Load interview questions from a CSV file.
 
@@ -199,20 +201,20 @@ class LLMInterview:
         Optionally it can also have question_stem.
 
         Args:
-            interview_path (str): Path to the CSV file.
+            interview_source (str or pd.Dataframe): Path to a valid CSV file or pd.Dataframe.
 
         Returns:
             Self: The updated instance with loaded questions.
         """
         interview_questions: List[InterviewItem] = []
 
-        if interview_path == None and interview_dataframe is None:
+        if interview_source is None:
             raise ValueError("Either a path or a dataframe have to be provided")
 
-        if interview_dataframe is not None:
-            df = interview_dataframe
+        if type(interview_source) == pd.DataFrame:
+            df = interview_source
         else:
-            df = pd.read_csv(interview_path)
+            df = pd.read_csv(interview_source)
 
         for _, row in df.iterrows():
             interview_item_id = row[constants.INTERVIEW_ITEM_ID]
@@ -294,12 +296,14 @@ class LLMInterview:
         if answer_options == None:
             self._global_options = None
         elif isinstance(answer_options, AnswerOptions):
+            self._same_options = True
             options_dict = False
             if global_options:
                 self._global_options = answer_options
             else:
                 self._global_options = None
         elif isinstance(answer_options, Dict):
+            self._same_options = False
             options_dict = True
             self._global_options = None
 
@@ -427,68 +431,16 @@ class LLMInterview:
 
         question_prompts = {}
 
-        # guided_decoding_params = None
-        # extended_json_structure: List[str] = None
-        # json_list: List[str] = None
-
         order = []
 
-        # if json_structured_output:
-        #     guided_decoding_params = {}
-        #     extended_json_structure = []
-        #     json_list = json_structure
-
-        # full_guided_decoding_params = None
-
-        # constraints: Dict[str, List[str]] = {}
-
-        answer_options = []
+        answer_options = {}
         for i, interview_question in enumerate(interview_questions):
             question_prompt = self.generate_question_prompt(
                 interview_question=interview_question
             )
             question_prompts[interview_question.item_id] = question_prompt
-            answer_options.append(interview_question.answer_options)
+            answer_options[interview_question.item_id] = interview_question.answer_options
             order.append(interview_question.item_id)
-
-            # guided_decoding = None
-            # if json_structured_output:
-
-            #     for element in json_structure:
-            #         extended_json_structure.append(f"{element}{i+1}")
-            #         if element == json_structure[-1]:
-            #             if survey_question.answer_options:
-            #                 constraints[f"{element}{i+1}"] = (
-            #                     survey_question.answer_options.answer_text
-            #                 )
-            #             elif self._global_options:
-            #                 constraints[f"{element}{i+1}"] = (
-            #                     self._global_options.answer_text
-            #                 )
-
-            #     single_constraints = {}
-            #     if survey_question.answer_options:
-            #         single_constraints = {
-            #             json_structure[-1]: survey_question.answer_options.answer_text
-            #         }
-            #     elif self._global_options:
-            #         single_constraints = {
-            #             json_structure[-1]: self._global_options.answer_text
-            #         }
-            #     pydantic_model = generate_pydantic_model(
-            #         fields=json_structure, constraints=single_constraints
-            #     )
-            #     json_schema = pydantic_model.model_json_schema()
-            #     guided_decoding = GuidedDecodingParams(json=json_schema)
-            #     guided_decoding_params[survey_question.item_id] = guided_decoding
-
-        # if json_structured_output:
-        #     pydantic_model = generate_pydantic_model(
-        #         fields=extended_json_structure,
-        #         constraints=constraints if json_force_answer else None,
-        #     )
-        #     full_json_schema = pydantic_model.model_json_schema()
-        #     full_guided_decoding_params = GuidedDecodingParams(json=full_json_schema)
 
         return InferenceOptions(
             system_prompt=self.system_prompt,

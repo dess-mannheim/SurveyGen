@@ -3,7 +3,7 @@ from typing import List, Dict, Optional
 from ..llm_interview import LLMInterview
 from ..utilities.survey_objects import InterviewResult
 
-from ..inference.survey_inference import batch_generation, AnswerProductionMethod
+from ..inference.survey_inference import batch_generation, ResponseGenerationMethod
 
 from ..utilities import constants
 
@@ -112,15 +112,24 @@ def json_parse_whole_survey_all(
             suffix="\\d+",
         ).reset_index()
 
-        num_rows_to_update = len(long_df)
+        minimum_rows = min(len(long_df), len(survey._questions))
+        
+        #print(num_rows_to_update)
+        print(long_df)
 
-        long_df.loc[0:num_rows_to_update, constants.INTERVIEW_ITEM_ID] = [
+        print(f"Len, long_df {len(long_df.loc[0:minimum_rows, constants.INTERVIEW_ITEM_ID])}")
+        print(f"Len, survey_questions {len([
             survey_question.item_id
-            for survey_question in survey._questions[0:num_rows_to_update]
+            for survey_question in survey._questions[0:minimum_rows]
+        ])}")
+
+        long_df.loc[0:minimum_rows, constants.INTERVIEW_ITEM_ID] = [
+            survey_question.item_id
+            for survey_question in survey._questions[0:minimum_rows]
         ]
-        long_df.loc[0:num_rows_to_update, constants.QUESTION] = [
+        long_df.loc[0:minimum_rows, constants.QUESTION] = [
             survey.generate_question_prompt(survey_question)
-            for survey_question in survey._questions[0:num_rows_to_update]
+            for survey_question in survey._questions[0:minimum_rows]
         ]
         long_df = long_df.drop(columns=constants.INTERVIEW_ITEM_ID).rename(
             columns={"new_survey_item_id": constants.INTERVIEW_ITEM_ID}
@@ -163,7 +172,7 @@ def llm_parse_all(
     survey_results: List[InterviewResult],
     system_prompt: str = DEFAULT_SYSTEM_PROMPT,
     prompt: str = DEFAULT_PROMPT,
-    answer_production_method: Optional[AnswerProductionMethod] = None,
+    answer_production_method: Optional[ResponseGenerationMethod] = None,
     print_conversation: bool = False,
     print_progress: bool = True,
     seed=42,
@@ -198,7 +207,7 @@ def llm_parse_all(
             model,
             system_messages = system_messages,
             prompts = all_prompts,
-            answer_production_method = answer_production_method, # TODO: fix automatic system prompt
+            response_generation_method = answer_production_method, # TODO: fix automatic system prompt
             seed = seed,
             print_conversation = print_conversation,
             print_progress = print_progress,

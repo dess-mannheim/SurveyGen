@@ -3,7 +3,7 @@ Module for managing and conducting surveys using LLM models.
 
 This module provides functions to conduct surveys in different ways:
 - Question by question
-- Whole survey in one prompt 
+- Whole survey in one prompt
 - In-context learning
 
 Usage example:
@@ -45,6 +45,7 @@ from string import ascii_lowercase, ascii_uppercase
 from .utilities.survey_objects import (
     AnswerOptions,
     QuestionLLMResponseTuple,
+    AnswerTexts,
 )
 from .utilities import prompt_templates
 from .utilities import constants
@@ -53,7 +54,11 @@ from .utilities import utils
 from .parser.llm_answer_parser import raw_responses
 
 from .inference.survey_inference import batch_generation, batch_turn_by_turn_generation
-from .inference.answer_production import AnswerProductionMethod, JSON_AnswerProductionMethod, Choice_AnswerProductionMethod
+from .inference.response_generation import (
+    ResponseGenerationMethod,
+    JSONResponseGenerationMethod,
+    ChoiceResponseGenerationMethod,
+)
 
 from .llm_interview import LLMInterview
 
@@ -107,8 +112,10 @@ class SurveyOptionGenerator:
         start_idx: int = 1,
         list_prompt_template: str = prompt_templates.LIST_OPTIONS_DEFAULT,
         scale_prompt_template: str = prompt_templates.SCALE_OPTIONS_DEFAULT,
+        index_answer_separator: str = ": ",
         options_separator: str = ", ",
         idx_type: _IDX_TYPES = "integer",
+        response_generation_method: Optional[ResponseGenerationMethod] = None,
     ) -> AnswerOptions:
         """Generates a set of options and a prompt for a Likert-style scale.
 
@@ -132,7 +139,7 @@ class SurveyOptionGenerator:
         :type reversed_order: bool
         :param even_order: Removes the middle answer option of the scale, if the scale is odd.
         :type even_order: bool
-        :param start_idx: The starting number for an integer-based scale (e.g., 1 or 0).
+        :param start_idx: The starting number for an character and integer based scales. Defaults to 1. If e.g. 2 is given then (0 -> 1) and (A -> B).
         :type start_idx: int
         :param list_prompt_template: The format string for a list-style prompt. Must contain `{options}`.
         :type list_prompt_template: str
@@ -149,211 +156,211 @@ class SurveyOptionGenerator:
                 (the formatted prompt string).
         :rtype: AnswerOptions"""
 
-        # @TODO @Jens Instead of assertions we should probably raise Value errors
         if only_from_to_scale:
             if len(answer_texts) != 2:
-                raise ValueError(f"From-To scales require exactly 2 descriptions, but answer_texts was set to '{answer_texts}'.")
-            if idx_type != 'integer':
-                raise ValueError(f"From-To scales require an integer scale index, but idx_type was set to '{idx_type}'.")
+                raise ValueError(
+                    f"From-To scales require exactly 2 descriptions, but answer_texts was set to '{answer_texts}'."
+                )
+            if idx_type != "integer":
+                raise ValueError(
+                    f"From-To scales require an integer scale index, but idx_type was set to '{idx_type}'."
+                )
         else:
             if answer_texts:
-                assert (
-                    len(answer_texts) == n
-                ), "Description list must be the same length as options"
+                if len(answer_texts) != n:
+                    raise ValueError(
+                        f"answer_texts and n need to be the same length, but answer_texts has length {len(answer_texts)} and n was given as {n}."
+                    )
         if even_order:
-            assert n % 2 != 0, "There must be a odd number of options!"
+            if n % 2 != 0:
+                raise ValueError(
+                    "If you want to turn a scale even, it should be odd before."
+                )
             middle_index = n // 2
             answer_texts = (
                 answer_texts[:middle_index] + answer_texts[middle_index + 1 :]
             )
             n = n - 1
         if random_order:
-            assert (
-                len(answer_texts) >= 2
-            ), "There must be at least two answer options to reorder randomly."
+            if len(answer_texts) < 2:
+                raise ValueError(
+                    "There must be at least two answer options to reorder randomly."
+                )
             random.shuffle(
                 answer_texts
             )  # no assignment needed because shuffles already inplace
         if reversed_order:
-            assert (
-                len(answer_option) >= 2
-            ), "There must be at least two answer options to reverse options."
+            if len(answer_texts) < 2:
+                raise ValueError(
+                    "There must be at least two answer options to reorder in reverse."
+                )
             answer_options = answer_options[::-1]
 
-        answer_options = []
-        answer_option_index = []
-
+        answer_option_indices = []
         if idx_type == "no_index":
             # no index, just the answer options directly
-            answer_options = answer_texts
-            answer_option_index = None
+            answer_option_indices = None
         elif idx_type == "integer":
             for i in range(n):
                 answer_code = i + start_idx
-                answer_option = f"{answer_code}"
-                if only_from_to_scale:
-                    if i == 0:
-                        answer_option = f"{answer_code}: {answer_texts[0]}"
-                    elif i == (n - 1):
-                        answer_option = f"{answer_code}: {answer_texts[1]}"
-                elif answer_texts:
-                    answer_option = f"{answer_code}: {answer_texts[i]}"
-                answer_options.append(answer_option)
-                answer_option_index.append(answer_code)
+                answer_option_indices.append(str(answer_code))
         else:
             # TODO @Jens add these to constants.py
             if idx_type == "char_lower":
                 for i in range(n):
-                    answer_option = f"{ascii_lowercase[i]}: {answer_texts[i]}"
-                    answer_options.append(answer_option)
-                    answer_option_index.append(ascii_lowercase[i])
+                    answer_option_indices.append(ascii_lowercase[(i + start_idx) % 26])
             elif idx_type == "char_upper":
                 for i in range(n):
-                    answer_option = f"{ascii_uppercase[i]}: {answer_texts[i]}"
-                    answer_options.append(answer_option)
-                    answer_option_index.append(ascii_uppercase[i])
+                    answer_option_indices.append(ascii_uppercase[(i + start_idx) % 26])
+
+        answer_texts_object = AnswerTexts(
+            answer_texts=answer_texts,
+            indices=answer_option_indices,
+            index_answer_seperator=index_answer_separator,
+            option_seperators=options_separator,
+        )
 
         interview_option = AnswerOptions(
-            answer_text = answer_options,
-            index = answer_option_index,
-            from_to_scale = only_from_to_scale,
-            list_prompt_template = list_prompt_template,
-            scale_prompt_template = scale_prompt_template,
-            options_seperator = options_separator,
+            answer_texts=answer_texts_object,
+            from_to_scale=only_from_to_scale,
+            list_prompt_template=list_prompt_template,
+            scale_prompt_template=scale_prompt_template,
+            response_generation_method=response_generation_method,
         )
 
         return interview_option
 
-    #TODO: It seems to me like this method and the one above could be merged? (Georg)
-    @staticmethod
-    def generate_generic_options(
-        answer_texts: Dict,
-        only_from_to_scale: bool = False,
-        random_order: bool = False,
-        reversed_order: bool = False,
-        even_order: bool = False,
-        idx_type: Optional[_IDX_TYPES] = None, # uses the answer_texts.keys() as an index by default
-        list_prompt_template: Optional[str] = prompt_templates.LIST_OPTIONS_DEFAULT,
-        scale_prompt_template: Optional[str] = prompt_templates.SCALE_OPTIONS_DEFAULT,
-        options_separator: str = ", ",
-    ):
+    # #TODO: It seems to me like this method and the one above could be merged? (Georg)
+    # @staticmethod
+    # def generate_generic_options(
+    #     answer_texts: Dict,
+    #     only_from_to_scale: bool = False,
+    #     random_order: bool = False,
+    #     reversed_order: bool = False,
+    #     even_order: bool = False,
+    #     idx_type: Optional[_IDX_TYPES] = None, # uses the answer_texts.keys() as an index by default
+    #     list_prompt_template: Optional[str] = prompt_templates.LIST_OPTIONS_DEFAULT,
+    #     scale_prompt_template: Optional[str] = prompt_templates.SCALE_OPTIONS_DEFAULT,
+    #     options_separator: str = ", ",
+    # ):
 
-        n = len(answer_texts.values())
-        answer_codes = answer_texts.keys()
-        answer_texts = answer_texts.values()
-        # answer_options = descriptions
+    #     n = len(answer_texts.values())
+    #     answer_codes = answer_texts.keys()
+    #     answer_texts = answer_texts.values()
+    #     # answer_options = descriptions
 
-        if idx_type == 'char_lower':
-            if all(isinstance(item, int) for item in answer_codes):
-                new_codes = []
-                for i in answer_codes:
-                    code = ascii_lowercase[i - 1]
-                    new_codes.append(code)
-                answer_codes = new_codes
-            else:
-                answer_codes = [s.lower() for s in answer_codes]
-        elif idx_type == 'char_upper':
-            if all(isinstance(item, int) for item in answer_codes):
-                new_codes = []
-                for i in answer_codes:
-                    code = ascii_uppercase[i - 1]
-                    new_codes.append(code)
-                answer_codes = new_codes
-            else:
-                answer_codes = [s.upper() for s in answer_codes]
-        elif idx_type == 'integer':
-            answer_codes = range(1, len(answer_codes) + 1)
+    #     if idx_type == 'char_lower':
+    #         if all(isinstance(item, int) for item in answer_codes):
+    #             new_codes = []
+    #             for i in answer_codes:
+    #                 code = ascii_lowercase[i - 1]
+    #                 new_codes.append(code)
+    #             answer_codes = new_codes
+    #         else:
+    #             answer_codes = [s.lower() for s in answer_codes]
+    #     elif idx_type == 'char_upper':
+    #         if all(isinstance(item, int) for item in answer_codes):
+    #             new_codes = []
+    #             for i in answer_codes:
+    #                 code = ascii_uppercase[i - 1]
+    #                 new_codes.append(code)
+    #             answer_codes = new_codes
+    #         else:
+    #             answer_codes = [s.upper() for s in answer_codes]
+    #     elif idx_type == 'integer':
+    #         answer_codes = range(1, len(answer_codes) + 1)
 
-        answer_options = dict(zip(answer_codes, answer_texts))
+    #     answer_options = dict(zip(answer_codes, answer_texts))
 
-        if only_from_to_scale:
-            assert all(
-                isinstance(item, int) for item in answer_codes
-            ), "To use from-to scale you must have integer answer codes."
+    #     if only_from_to_scale:
+    #         assert all(
+    #             isinstance(item, int) for item in answer_codes
+    #         ), "To use from-to scale you must have integer answer codes."
 
-        if random_order:
-            assert (
-                n >= 2
-            ), "There must be at least two answer options to reorder randomly."
-            temp = list(answer_texts)
-            random.shuffle(temp)
-            # reassigning to keys
-            answer_options = dict(zip(answer_codes, temp))
-        if reversed_order:
-            assert (
-                n >= 2
-            ), "There must be at least two answer options to reverse options."
-            reversed_values = list(answer_texts)[::-1]
-            answer_options = dict(zip(answer_codes, reversed_values))
-        if even_order:
-            assert n % 2 != 0, "There must be a odd number of options!"
-            middle_index = n // 2
-            # Get the key of the item to be removed
-            key_to_remove = list(answer_codes)[middle_index]
-            # Create a new dictionary, excluding the item with key_to_remove
-            # This uses a dictionary comprehension.
-            answer_options = {
-                key: value
-                for key, value in answer_options.items()
-                if key != key_to_remove
-            }
-            if all(isinstance(element, int) for element in list(answer_codes)):
-                first_part = list(answer_codes)[:middle_index]
-                last_part = list(answer_codes)[middle_index + 1 :]
-                last_part = [x - 1 for x in last_part]
-                answer_options = dict(
-                    zip(first_part + last_part, answer_options.values())
-                )
-            elif set(list(answer_codes)).issubset(list(ascii_lowercase)):
-                first_part = list(answer_codes)[:middle_index]
-                # print("First part:", first_part)
-                last_part = list(answer_codes)[middle_index + 1 :]
-                # print("Last part:", last_part)
-                last_parts = []
-                for i in range(middle_index + 1, len(list(answer_codes))):
-                    part = list(ascii_lowercase)[i - 1]
-                    last_parts.append(part)
-                    # print("Last parts:", last_parts)
-                answer_options = dict(
-                    zip(first_part + last_parts, answer_options.values())
-                )
-            elif set(list(answer_codes)).issubset(list(ascii_uppercase)):
-                first_part = list(answer_codes)[:middle_index]
-                # print("First part:", first_part)
-                last_part = list(answer_codes)[middle_index + 1 :]
-                # print("Last part:", last_part)
-                last_parts = []
-                for i in range(middle_index + 1, len(list(answer_codes))):
-                    part = list(ascii_uppercase)[i - 1]
-                    last_parts.append(part)
-                    # print("Last parts:", last_parts)
-                answer_options = dict(
-                    zip(first_part + last_parts, answer_options.values())
-                )
+    #     if random_order:
+    #         assert (
+    #             n >= 2
+    #         ), "There must be at least two answer options to reorder randomly."
+    #         temp = list(answer_texts)
+    #         random.shuffle(temp)
+    #         # reassigning to keys
+    #         answer_options = dict(zip(answer_codes, temp))
+    #     if reversed_order:
+    #         assert (
+    #             n >= 2
+    #         ), "There must be at least two answer options to reverse options."
+    #         reversed_values = list(answer_texts)[::-1]
+    #         answer_options = dict(zip(answer_codes, reversed_values))
+    #     if even_order:
+    #         assert n % 2 != 0, "There must be a odd number of options!"
+    #         middle_index = n // 2
+    #         # Get the key of the item to be removed
+    #         key_to_remove = list(answer_codes)[middle_index]
+    #         # Create a new dictionary, excluding the item with key_to_remove
+    #         # This uses a dictionary comprehension.
+    #         answer_options = {
+    #             key: value
+    #             for key, value in answer_options.items()
+    #             if key != key_to_remove
+    #         }
+    #         if all(isinstance(element, int) for element in list(answer_codes)):
+    #             first_part = list(answer_codes)[:middle_index]
+    #             last_part = list(answer_codes)[middle_index + 1 :]
+    #             last_part = [x - 1 for x in last_part]
+    #             answer_options = dict(
+    #                 zip(first_part + last_part, answer_options.values())
+    #             )
+    #         elif set(list(answer_codes)).issubset(list(ascii_lowercase)):
+    #             first_part = list(answer_codes)[:middle_index]
+    #             # print("First part:", first_part)
+    #             last_part = list(answer_codes)[middle_index + 1 :]
+    #             # print("Last part:", last_part)
+    #             last_parts = []
+    #             for i in range(middle_index + 1, len(list(answer_codes))):
+    #                 part = list(ascii_lowercase)[i - 1]
+    #                 last_parts.append(part)
+    #                 # print("Last parts:", last_parts)
+    #             answer_options = dict(
+    #                 zip(first_part + last_parts, answer_options.values())
+    #             )
+    #         elif set(list(answer_codes)).issubset(list(ascii_uppercase)):
+    #             first_part = list(answer_codes)[:middle_index]
+    #             # print("First part:", first_part)
+    #             last_part = list(answer_codes)[middle_index + 1 :]
+    #             # print("Last part:", last_part)
+    #             last_parts = []
+    #             for i in range(middle_index + 1, len(list(answer_codes))):
+    #                 part = list(ascii_uppercase)[i - 1]
+    #                 last_parts.append(part)
+    #                 # print("Last parts:", last_parts)
+    #             answer_options = dict(
+    #                 zip(first_part + last_parts, answer_options.values())
+    #             )
 
-        if idx_type == 'no_index':
-            answer_option_strings = list(answer_options.values())
-            answer_option_index = None
-        else:
-            answer_option_strings = [f"{key}: {val}" for key, val in answer_options.items()]
-            answer_option_index = list(answer_options.keys())
-        #print(answer_options)
+    #     if idx_type == 'no_index':
+    #         answer_option_strings = list(answer_options.values())
+    #         answer_option_index = None
+    #     else:
+    #         answer_option_strings = [f"{key}: {val}" for key, val in answer_options.items()]
+    #         answer_option_index = list(answer_options.keys())
+    #     #print(answer_options)
 
-        interview_option = AnswerOptions(
-            answer_text = answer_option_strings,
-            index = answer_option_index,
-            from_to_scale = only_from_to_scale,
-            list_prompt_template = list_prompt_template,
-            scale_prompt_template = scale_prompt_template,
-            options_seperator = options_separator,
-        )
+    #     interview_option = AnswerOptions(
+    #         answer_text = answer_option_strings,
+    #         index = answer_option_index,
+    #         from_to_scale = only_from_to_scale,
+    #         list_prompt_template = list_prompt_template,
+    #         scale_prompt_template = scale_prompt_template,
+    #         options_seperator = options_separator,
+    #     )
 
-        return interview_option
+    #     return interview_option
+
 
 def conduct_survey_question_by_question(
     model: Union[LLM, AsyncOpenAI],
     interviews: Union[LLMInterview, List[LLMInterview]],
-    answer_production_method: Optional[AnswerProductionMethod] = None,
+    # response_generation_method: Optional[ResponseGenerationMethod] = None,
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
     print_conversation: bool = False,
@@ -409,19 +416,19 @@ def conduct_survey_question_by_question(
 
     survey_results: List[InterviewResult] = []
 
-    #TODO allow for different answer option constraints between surveys/questions
-    if answer_production_method:
-        if (isinstance(answer_production_method, JSON_AnswerProductionMethod) and
-            answer_production_method.constraints):
-            for json_element in answer_production_method.constraints.keys():
-                if answer_production_method.constraints[json_element] == constants.OPTIONS_ADJUST:
-                    answer_production_method.constraints[json_element] = inference_options[0].answer_options[0].answer_text
-        elif (isinstance(answer_production_method, Choice_AnswerProductionMethod) and
-              answer_production_method.allowed_choices == constants.OPTIONS_ADJUST):
-            answer_production_method.allowed_choices = inference_options[0].answer_options[0].answer_text
+    # #TODO allow for different answer option constraints between surveys/questions
+    # if response_generation_method:
+    #     if (isinstance(response_generation_method, JSONResponseGenerationMethod) and
+    #         response_generation_method.constraints):
+    #         for json_element in response_generation_method.constraints.keys():
+    #             if response_generation_method.constraints[json_element] == constants.OPTIONS_ADJUST:
+    #                 response_generation_method.constraints[json_element] = inference_options[0].answer_options[0].answer_texts.full_answers
+    #     elif (isinstance(response_generation_method, ChoiceResponseGenerationMethod) and
+    #           response_generation_method.allowed_choices == constants.OPTIONS_ADJUST):
+    #         response_generation_method.allowed_choices = inference_options[0].answer_options[0].answer_texts.full_answers
 
     for i in (
-        tqdm(range(max_survey_length), desc='Processing interviews')
+        tqdm(range(max_survey_length), desc="Processing interviews")
         if print_progress
         else range(max_survey_length)
     ):
@@ -431,26 +438,28 @@ def conduct_survey_question_by_question(
             if len(inference_option.order) > i
         ]
 
-        if answer_production_method:
-            if (isinstance(answer_production_method, JSON_AnswerProductionMethod)
-                and answer_production_method.automatic_system_prompt):
-                _answer_options = ', '.join(inference_options[0].answer_options[0].answer_text)
-                json_instructions = answer_production_method.system_prompt_template.format(options=_answer_options)
-                system_messages = [
-                    inference.json_system_prompt(
-                        json_fields = answer_production_method.json_fields,
-                        json_instructions = json_instructions
-                    )
-                    for inference in current_batch
-                ]
-            elif answer_production_method.automatic_system_prompt:
-                _answer_options = ', '.join(inference_options[0].answer_options[0].answer_text)
-                _instructions = answer_production_method.system_prompt_template.format(options=_answer_options)
-                system_messages = [f"{inference.system_prompt}\n{_instructions}" for inference in current_batch]
-            else:
-                system_messages = [inference.system_prompt for inference in current_batch]
-        else:
-            system_messages = [inference.system_prompt for inference in current_batch]
+        # if response_generation_method:
+        #     if (isinstance(response_generation_method, JSONResponseGenerationMethod)
+        #         and response_generation_method.automatic_system_prompt):
+        #         _answer_options = ', '.join(inference_options[0].answer_options[0].answer_text)
+        #         json_instructions = response_generation_method.system_prompt_template.format(options=_answer_options)
+        #         system_messages = [
+        #             inference.json_system_prompt(
+        #                 json_fields = response_generation_method.json_fields,
+        #                 json_instructions = json_instructions
+        #             )
+        #             for inference in current_batch
+        #         ]
+        #     elif response_generation_method.automatic_system_prompt:
+        #         _answer_options = ', '.join(inference_options[0].answer_options[0].answer_text)
+        #         _instructions = response_generation_method.system_prompt_template.format(options=_answer_options)
+        #         system_messages = [f"{inference.system_prompt}\n{_instructions}" for inference in current_batch]
+        #     else:
+        #         system_messages = [inference.system_prompt for inference in current_batch]
+        # else:
+        #     system_messages = [inference.system_prompt for inference in current_batch]
+
+        system_messages = [inference.system_prompt for inference in current_batch]
         prompts = [
             inference.create_single_question(inference.order[i], task_instruction=True)
             for inference in current_batch
@@ -459,12 +468,16 @@ def conduct_survey_question_by_question(
             inference.create_single_question(inference.order[i], task_instruction=False)
             for inference in current_batch
         ]
+        response_generation_methods = [
+            inference.get_response_generation_methods(inference.order[i])
+            for inference in current_batch
+        ]
 
         output, logprobs, reasoning_output = batch_generation(
             model=model,
             system_messages=system_messages,
             prompts=prompts,
-            answer_production_method=answer_production_method,
+            response_generation_method=response_generation_methods,
             client_model_name=client_model_name,
             api_concurrency=api_concurrency,
             print_conversation=print_conversation,
@@ -475,24 +488,47 @@ def conduct_survey_question_by_question(
         )
 
         # avoid errors when zipping
-        if logprobs is None: logprobs = [None] * len(current_batch)
+        if logprobs is None:
+            logprobs = [None] * len(current_batch)
 
         for survey_id, question, answer, logprob_answer, reasoning, item in zip(
-            range(len(current_batch)), questions, output, logprobs, reasoning_output, current_batch
+            range(len(current_batch)),
+            questions,
+            output,
+            logprobs,
+            reasoning_output,
+            current_batch,
         ):
             question_llm_response_pairs[survey_id].update(
-                {item.order[i]: QuestionLLMResponseTuple(question, answer, logprob_answer, reasoning)}
+                {
+                    item.order[i]: QuestionLLMResponseTuple(
+                        question, answer, logprob_answer, reasoning
+                    )
+                }
             )
 
         # TODO: check that this works with logprobs
-        _intermediate_saves(interviews, n_save_step, intermediate_save_file, question_llm_response_pairs, i)
+        _intermediate_saves(
+            interviews,
+            n_save_step,
+            intermediate_save_file,
+            question_llm_response_pairs,
+            i,
+        )
 
     for i, survey in enumerate(interviews):
         survey_results.append(InterviewResult(survey, question_llm_response_pairs[i]))
 
     return survey_results
 
-def _intermediate_saves(interviews: List[LLMInterview], n_save_step: int, intermediate_save_file: str, question_llm_response_pairs: QuestionLLMResponseTuple, i: int):
+
+def _intermediate_saves(
+    interviews: List[LLMInterview],
+    n_save_step: int,
+    intermediate_save_file: str,
+    question_llm_response_pairs: QuestionLLMResponseTuple,
+    i: int,
+):
     """
     Internal helper to save intermediate survey results.
 
@@ -507,11 +543,14 @@ def _intermediate_saves(interviews: List[LLMInterview], n_save_step: int, interm
         if i % n_save_step == 0:
             intermediate_survey_results: List[InterviewResult] = []
             for j, interview in enumerate(interviews):
-                intermediate_survey_results.append(InterviewResult(interview, question_llm_response_pairs[j]))
+                intermediate_survey_results.append(
+                    InterviewResult(interview, question_llm_response_pairs[j])
+                )
             parsed_results = raw_responses(intermediate_survey_results)
             utils.create_one_dataframe(parsed_results).to_csv(intermediate_save_file)
 
-def _intermediate_save_path_check(n_save_step:int, intermediate_save_path:str):
+
+def _intermediate_save_path_check(n_save_step: int, intermediate_save_path: str):
     """
     Internal helper to validate intermediate save path.
 
@@ -524,18 +563,22 @@ def _intermediate_save_path_check(n_save_step:int, intermediate_save_path:str):
             raise ValueError("`n_save_step` must be a positive integer.")
 
         if not intermediate_save_path:
-            raise ValueError("`intermediate_save_file` must be provided if saving is enabled.")
-        
+            raise ValueError(
+                "`intermediate_save_file` must be provided if saving is enabled."
+            )
+
         if not intermediate_save_path.endswith(".csv"):
             raise ValueError("`intermediate_save_file` should be a .csv file.")
-        
+
         # Ensure it's a directory that exists or can be created
         parent_dir = Path(intermediate_save_path).parent
         if not parent_dir.exists():
             try:
                 parent_dir.mkdir(parents=True, exist_ok=True)
             except Exception as e:
-                raise ValueError(f"Invalid intermediate save path: {intermediate_save_path}. Error: {e}")
+                raise ValueError(
+                    f"Invalid intermediate save path: {intermediate_save_path}. Error: {e}"
+                )
 
         # Optional: Check it's writable
         if not os.access(parent_dir, os.W_OK):
@@ -545,7 +588,6 @@ def _intermediate_save_path_check(n_save_step:int, intermediate_save_path:str):
 def conduct_whole_survey_one_prompt(
     model: Union[LLM, AsyncOpenAI],
     interviews: Union[LLMInterview, List[LLMInterview]],
-    answer_production_method: Optional[AnswerProductionMethod] = None,
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
     n_save_step: Optional[int] = None,
@@ -598,7 +640,7 @@ def conduct_whole_survey_one_prompt(
     survey_results: List[InterviewResult] = []
 
     for i in (
-        tqdm(range(max_survey_length), desc='Processing interviews')
+        tqdm(range(max_survey_length), desc="Processing interviews")
         if print_progress
         else range(max_survey_length)
     ):
@@ -608,49 +650,67 @@ def conduct_whole_survey_one_prompt(
             if len(inference_option.order) > i
         ]
 
-        if answer_production_method:
-            if isinstance(answer_production_method, JSON_AnswerProductionMethod):
-                all_json_structures = []
-                all_constraints = []
-                for inference_option in current_batch:
-                    full_json_structure = []
-                    full_constraints = {}
-                    for i in range(len(inference_option.answer_options)):
-                        for json_element in answer_production_method.json_fields:
-                            new_element = f"{json_element}{i}"
-                            if answer_production_method.constraints:
-                                constraints_element = answer_production_method.constraints.get(json_element)
-                                if constraints_element == constants.OPTIONS_ADJUST:
-                                    full_constraints[new_element] = inference_option.answer_options[i].answer_text
-                                elif constraints_element != None:
-                                    full_constraints[new_element] = constraints_element
-                            full_json_structure.append(new_element)
-                    all_constraints.append(full_constraints)
-                    all_json_structures.append(full_json_structure)
-                answer_production_method.constraints = all_constraints[0]
-                answer_production_method.json_fields = all_json_structures[0]
-                if answer_production_method.automatic_system_prompt:
-                    system_messages = [
-                        # TODO: add support for JSON custom JSON prompt instructions, including formatting
-                        inference.json_system_prompt(all_json_structures[num])
-                        for num, inference in enumerate(current_batch)
-                    ]
-                else:
-                    system_messages = [inference.system_prompt for inference in current_batch]
-            # TODO: add support for automatic system prompt for other answer production methods
-            elif isinstance(answer_production_method, Choice_AnswerProductionMethod):
-                if answer_production_method.allowed_choices == constants.OPTIONS_ADJUST:
-                    answer_production_method.allowed_choices = inference_option.answer_options[0].answer_text
-                system_messages = [inference.system_prompt for inference in current_batch]
-        else:
-            system_messages = [inference.system_prompt for inference in current_batch]
+        # if response_generation_method:
+        #     if isinstance(response_generation_method, JSONResponseGenerationMethod):
+        #         all_json_structures = []
+        #         all_constraints = []
+        #         for inference_option in current_batch:
+        #             full_json_structure = []
+        #             full_constraints = {}
+        #             for i in range(len(inference_option.answer_options)):
+        #                 for json_element in response_generation_method.json_fields:
+        #                     new_element = f"{json_element}{i}"
+        #                     if response_generation_method.constraints:
+        #                         constraints_element = (
+        #                             response_generation_method.constraints.get(
+        #                                 json_element
+        #                             )
+        #                         )
+        #                         if constraints_element == constants.OPTIONS_ADJUST:
+        #                             full_constraints[new_element] = (
+        #                                 inference_option.answer_options[i].answer_text
+        #                             )
+        #                         elif constraints_element != None:
+        #                             full_constraints[new_element] = constraints_element
+        #                     full_json_structure.append(new_element)
+        #             all_constraints.append(full_constraints)
+        #             all_json_structures.append(full_json_structure)
+        #         response_generation_method.constraints = all_constraints[0]
+        #         response_generation_method.json_fields = all_json_structures[0]
+        #         if response_generation_method.automatic_system_prompt:
+        #             system_messages = [
+        #                 # TODO: add support for JSON custom JSON prompt instructions, including formatting
+        #                 inference.json_system_prompt(all_json_structures[num])
+        #                 for num, inference in enumerate(current_batch)
+        #             ]
+        #         else:
+        #             system_messages = [
+        #                 inference.system_prompt for inference in current_batch
+        #             ]
+        #     # TODO: add support for automatic system prompt for other answer production methods
+        #     elif isinstance(response_generation_method, ChoiceResponseGenerationMethod):
+        #         if (
+        #             response_generation_method.allowed_choices
+        #             == constants.OPTIONS_ADJUST
+        #         ):
+        #             response_generation_method.allowed_choices = (
+        #                 inference_option.answer_options[0].answer_text
+        #             )
+        #         system_messages = [
+        #             inference.system_prompt for inference in current_batch
+        #         ]
+        # else:
+        
+        system_messages = [inference.system_prompt for inference in current_batch]
         prompts = [inference.create_all_questions() for inference in current_batch]
+
+        response_generation_methods = [inference.create_whole_response_generation_method() for inference in current_batch]
 
         output, logprobs, reasoning_output = batch_generation(
             model=model,
             system_messages=system_messages,
             prompts=prompts,
-            answer_production_method=answer_production_method,
+            response_generation_method=response_generation_methods,
             client_model_name=client_model_name,
             api_concurrency=api_concurrency,
             print_conversation=print_conversation,
@@ -661,16 +721,27 @@ def conduct_whole_survey_one_prompt(
         )
 
         # avoid errors when zipping
-        if logprobs is None: logprobs = [None] * len(current_batch)
+        if logprobs is None:
+            logprobs = [None] * len(current_batch)
 
-        for survey_id, prompt, answer, logprob_answer in zip(
-            range(len(current_batch)), prompts, output, logprobs
+        for survey_id, prompt, answer, logprob_answer, reasoning in zip(
+            range(len(current_batch)), prompts, output, logprobs, reasoning_output
         ):
             question_llm_response_pairs[survey_id].update(
-                {-1: QuestionLLMResponseTuple(prompt, answer, logprob_answer)}
+                {
+                    -1: QuestionLLMResponseTuple(
+                        prompt, answer, logprob_answer, reasoning
+                    )
+                }
             )
-        
-        _intermediate_saves(interviews, n_save_step, intermediate_save_file, question_llm_response_pairs, i)
+
+        _intermediate_saves(
+            interviews,
+            n_save_step,
+            intermediate_save_file,
+            question_llm_response_pairs,
+            i,
+        )
 
     for i, survey in enumerate(interviews):
         survey_results.append(InterviewResult(survey, question_llm_response_pairs[i]))
@@ -681,7 +752,6 @@ def conduct_whole_survey_one_prompt(
 def conduct_survey_in_context(
     model: Union[LLM, AsyncOpenAI],
     interviews: Union[LLMInterview, List[LLMInterview]],
-    answer_production_method: Optional[AnswerProductionMethod] = None,
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
     print_conversation: bool = False,
@@ -736,22 +806,12 @@ def conduct_survey_in_context(
     all_prompts: List[List[str]] = []
     assistant_messages: List[List[str]] = []
 
-    if answer_production_method:
-        if (isinstance(answer_production_method, JSON_AnswerProductionMethod) and
-            answer_production_method.constraints):
-            for json_element in answer_production_method.constraints.keys():
-                if answer_production_method.constraints[json_element] == constants.OPTIONS_ADJUST:
-                    answer_production_method.constraints[json_element] = inference_options[0].answer_options[0].answer_text
-        elif (isinstance(answer_production_method, Choice_AnswerProductionMethod) and
-              answer_production_method.allowed_choices == constants.OPTIONS_ADJUST):
-            answer_production_method.allowed_choices = inference_options[0].answer_options[0].answer_text
-
     for i in range(len(interviews)):
         assistant_messages.append([])
         all_prompts.append([])
 
     for i in (
-        tqdm(range(max_survey_length), desc='Processing interviews')
+        tqdm(range(max_survey_length), desc="Processing interviews")
         if print_progress
         else range(max_survey_length)
     ):
@@ -774,6 +834,11 @@ def conduct_survey_in_context(
             inference.create_single_question(inference.order[i], task_instruction=False)
             for inference in current_batch
         ]
+
+        response_generation_methods = [
+            inference.get_response_generation_methods(inference.order[i])
+            for inference in current_batch
+        ]
         for c in range(len(current_surveys)):
             all_prompts[c].append(prompts[c])
 
@@ -794,40 +859,33 @@ def conduct_survey_in_context(
         if len(current_batch) == 0:
             for c in range(len(current_surveys)):
                 assistant_messages[c].append(current_assistant_messages[c])
-            for survey_id, question, llm_response, item in zip(
+            for survey_id, question, llm_response, logprob_answer, reasoning, item in zip(
                 range(len(current_surveys)),
                 questions,
                 current_assistant_messages,
+                logprobs,
+                reasoning_output,
+                current_batch,
                 current_surveys,
             ):
                 question_llm_response[survey_id].update(
                     {
                         item._questions[i].item_id: QuestionLLMResponseTuple(
-                            question, llm_response, None
+                            question, llm_response, logprob_answer, reasoning
                         )
                     }
                 )
             continue
-        if answer_production_method:
-            if (isinstance(answer_production_method, JSON_AnswerProductionMethod)
-                and answer_production_method.automatic_system_prompt):
-                system_messages = [
-                    # TODO: add support for JSON custom JSON prompt instructions, including formatting
-                    inference.json_system_prompt(json_fields=answer_production_method.json_fields)
-                    for inference in current_batch
-                ]
             # TODO: add support for automatic system prompt for other answer production methods
-            else:
-                system_messages = [inference.system_prompt for inference in current_batch]
         else:
             system_messages = [inference.system_prompt for inference in current_batch]
 
-        output = batch_turn_by_turn_generation(
+        output, logprobs, reasoning_output = batch_turn_by_turn_generation(
             model=model,
             system_messages=system_messages,
             prompts=all_prompts,
             assistant_messages=assistant_messages,
-            answer_production_method=answer_production_method,
+            response_generation_method=response_generation_methods,
             client_model_name=client_model_name,
             api_concurrency=api_concurrency,
             print_conversation=print_conversation,
@@ -836,15 +894,23 @@ def conduct_survey_in_context(
             **generation_kwargs,
         )
 
+        # avoid errors when zipping
+        if logprobs is None or len(logprobs) == 0:
+            logprobs = [None] * len(current_batch)
+
+        print(f"{logprobs} logprobs")
+        print(f"{reasoning_output} reasonings")
+
         for num, index in enumerate(missing_indeces):
             output.insert(index, current_assistant_messages[num])
-        for survey_id, question, llm_response, item in zip(
-            range(len(current_surveys)), questions, output, current_surveys
+        for survey_id, question, llm_response, logprob_answer, reasoning, item in zip(
+            range(len(current_surveys)), questions, output, logprobs, reasoning_output, current_surveys
         ):
+            print("update step")
             question_llm_response[survey_id].update(
                 {
                     item._questions[i].item_id: QuestionLLMResponseTuple(
-                        question, llm_response, None
+                        question, llm_response, logprob_answer, reasoning
                     )
                 }
             )
@@ -853,16 +919,22 @@ def conduct_survey_in_context(
             assistant_messages[o].append(output[o])
         # assistant_messages.append(output)
 
-        _intermediate_saves(interviews, n_save_step, intermediate_save_file, question_llm_response, i)
+        _intermediate_saves(
+            interviews, n_save_step, intermediate_save_file, question_llm_response, i
+        )
 
+    print(question_llm_response)
     for i, survey in enumerate(interviews):
         survey_results.append(InterviewResult(survey, question_llm_response[i]))
 
     return survey_results
 
+
 class SurveyCreator:
     @classmethod
-    def from_path(self, survey_path: str, questionnaire_path: str) -> List[LLMInterview]:
+    def from_path(
+        self, survey_path: str, questionnaire_path: str
+    ) -> List[LLMInterview]:
         """
         Generates LLMInterview objects from a CSV file path.
 
@@ -877,7 +949,9 @@ class SurveyCreator:
         return self._from_dataframe(df, df_questionnaire)
 
     @classmethod
-    def from_dataframe(self, survey_dataframe: pd.DataFrame, questionnaire_dataframe: pd.DataFrame) -> List[LLMInterview]:
+    def from_dataframe(
+        self, survey_dataframe: pd.DataFrame, questionnaire_dataframe: pd.DataFrame
+    ) -> List[LLMInterview]:
         """
         Generates LLMInterview objects from a pandas DataFrame.
 
@@ -894,14 +968,23 @@ class SurveyCreator:
         """
         Internal helper method to process the DataFrame.
         """
-        return LLMInterview(interview_dataframe=df_questionnaire, interview_name=row[constants.INTERVIEW_NAME], system_prompt=row[constants.SYSTEM_PROMPT_FIELD], interview_instruction=row[constants.INTERVIEW_INSTRUCTION_FIELD])
-        
+        return LLMInterview(
+            interview_source=df_questionnaire,
+            interview_name=row[constants.INTERVIEW_NAME],
+            system_prompt=row[constants.SYSTEM_PROMPT_FIELD],
+            interview_instruction=row[constants.INTERVIEW_INSTRUCTION_FIELD],
+        )
+
     @classmethod
-    def _from_dataframe(self, df: pd.DataFrame, df_questionnaire: pd.DataFrame) -> List[LLMInterview]:
+    def _from_dataframe(
+        self, df: pd.DataFrame, df_questionnaire: pd.DataFrame
+    ) -> List[LLMInterview]:
         """
         Internal helper method to process the DataFrame.
         """
-        interviews = df.apply(lambda row: self._create_interview(row, df_questionnaire), axis=1)
+        interviews = df.apply(
+            lambda row: self._create_interview(row, df_questionnaire), axis=1
+        )
         return interviews.to_list()
 
 
