@@ -209,9 +209,11 @@ def batch_generation(
             plain_results.append(output_text.split(reasoning_end_token)[-1].strip())
 
         
-        logprob_result = []
+
         for rgm in response_generation_method:
+                   
             if isinstance(rgm, LogprobResponseGenerationMethod):
+                logprob_result = []
                 # ignore the first k tokens that belong to the reasoning
                 if rgm.ignore_reasoning:
                     tokenizer = model.get_tokenizer()
