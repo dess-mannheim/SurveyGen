@@ -433,6 +433,7 @@ def _structured_sampling_params(
                 guided_decoding=guided_decodings[i],
                 **generation_kwargs,
             )
+
             for i in range(batch_size)
         ]
     elif use_vllm:
