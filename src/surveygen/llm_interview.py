@@ -133,7 +133,8 @@ class LLMInterview:
         Returns:
             str: The constructed prompt for the interview type.
         """
-
+        options = ""    
+        automatic_output_instructions = ""
         if (
             interview_type == InterviewType.QUESTION
             or interview_type == InterviewType.CONTEXT
@@ -146,10 +147,9 @@ class LLMInterview:
                 rgm = self._questions[
                     item_id
                 ].answer_options.response_generation_method
-                automatic_output_instructions: str = rgm.get_automatic_prompt()
-            else:
-                options = ""
-                automatic_output_instructions = ""            
+                if rgm:
+                    automatic_output_instructions: str = rgm.get_automatic_prompt()
+          
 
             format_dict = {
                 placeholder.PROMPT_QUESTIONS: question,
@@ -178,11 +178,8 @@ class LLMInterview:
                 rgm = self._questions[
                     item_id
                 ].answer_options.response_generation_method
-
-                automatic_output_instructions: str = rgm.get_automatic_prompt(questions=self._questions)
-            else:
-                options = ""
-                automatic_output_instructions = ""
+                if rgm:
+                    automatic_output_instructions: str = rgm.get_automatic_prompt(questions=self._questions)
             
 
             format_dict = {
