@@ -1,11 +1,8 @@
-```{eval-rst}
-.. automodule:: surveygen.survey_manager
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```
-.. automodule:: surveygen.llm_interview
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```
+# Detailed Documentation
+
+This is the auto-generated documentation from the source code.
+
+```{toctree}
+:maxdepth: 2
+
+api/modules
