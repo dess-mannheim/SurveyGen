@@ -45,7 +45,7 @@ class LLMInterview:
 
     DEFAULT_JSON_STRUCTURE: List[str] = ["reasoning", "answer"]
 
-    DEFAULT_PROMPT_STRUCTURE: str = "{questions}\n{options}"
+    DEFAULT_PROMPT_STRUCTURE: str = f"{placeholder.PROMPT_QUESTIONS}\n{placeholder.PROMPT_OPTIONS}"
 
     def __init__(
         self,
@@ -147,9 +147,13 @@ class LLMInterview:
                 rgm = self._questions[
                     item_id
                 ].answer_options.response_generation_method
-                if rgm:
+                if rgm is None: # by default, no response generation method is required
+                    automatic_output_instructions = ""
+                else:
                     automatic_output_instructions: str = rgm.get_automatic_prompt()
-          
+            else:
+                options = ""
+                automatic_output_instructions = ""            
 
             format_dict = {
                 placeholder.PROMPT_QUESTIONS: question,
@@ -178,8 +182,14 @@ class LLMInterview:
                 rgm = self._questions[
                     item_id
                 ].answer_options.response_generation_method
-                if rgm:
+
+                if rgm is None: # by default, no response generation method is required
+                    automatic_output_instructions = ""
+                else:
                     automatic_output_instructions: str = rgm.get_automatic_prompt(questions=self._questions)
+            else:
+                options = ""
+                automatic_output_instructions = ""
             
 
             format_dict = {
