@@ -242,7 +242,7 @@ parsed_results = parser.json_parse_all(results)
 df = create_one_dataframe(parsed_results)
 ```
 
-And now we get answers that are more aligned with the free text answers from before and easily parsable responses.
+And now we get answers that are more aligned with the free text answers from before but also easily parsable responses. If you are interested in which Response Generation Methods reflect public opinion most closely and also which are most efficient to use, we encourage you to check out this paper: [Survey Response Generation: Generating Closed-Ended Survey Responses In-Silico with Large Language Models](https://arxiv.org/abs/2510.11586).
 
 |interview_name|interview_item_id|question                                                                                                                                                                        |reasoning                                                                                  |answer                    |
 |--------------|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|--------------------------|
