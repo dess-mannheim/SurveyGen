@@ -182,7 +182,7 @@ system_prompt_texas = "Act as if you were a white middle aged man from Texas! An
 
 texas_interview = LLMInterview(interview_name="Texas", interview_source=party_questionnaire, system_prompt=system_prompt_texas, prompt=prompt)
 
-both_intervies = [interviews, texas_interview]
+both_interviews = [interviews, texas_interview]
 
 results = survey_manager.conduct_survey_question_by_question(
     model,

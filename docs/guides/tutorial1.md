@@ -65,7 +65,11 @@ options = survey_manager.SurveyOptionGenerator.generate_likert_options(
 )
 ```
 
-With SurveyGen we can easily create a likert scala. If we want to control for prompt pertubations, for example random or reverse order of options, we simply set a flag to change them. For now let's keep the options as they are. To include these options in the prompt we simply can use the ``prepare_interview`` function of ``LLMInterview`` to specify how our questions should be asked. We can specify placeholders to define at which point in the prompt the options or questions should be specified. Note that ``placeholder.PROMPT_OPTIONS`` can also be specified in the system prompt or prompt above, if we do want to place it independently from the questions. Again we can simply set a flag, if we want our questions to be in a random order.
+With SurveyGen we can easily create a likert scala. If we want to control for prompt pertubations, for example random or reverse order of options, we simply set a flag to change them. 
+
+For now let's keep the options as they are. To include these options in the prompt we simply can use the ``prepare_interview`` function of ``LLMInterview`` to specify how our questions should be asked. We can specify placeholders to define at which point in the prompt the options or questions should be specified. 
+
+Note that ``placeholder.PROMPT_OPTIONS`` can also be specified in the system prompt or prompt above, if we do want to place it independently from the questions. Again we can simply set a flag, if we want our questions to be in a random order.
 
 ```python
 from surveygen.utilities import placeholder
@@ -77,7 +81,7 @@ interview.prepare_interview(
 )
 ```
 
-Let's take a look at our current prompts. Depending on how we conduct the interview, the prompts will contain all questions or just one of them. For now let's look at the prompt if we ask each question in a new context.
+Let's take a look at our current prompts. Depending on how we conduct the interview, the prompts will contain all questions or just one of them. For now let's assume we give each question in a new context.
 
 ```python
 system_prompt, prompt = interviews[0].get_prompt_for_interview_type()
@@ -90,8 +94,7 @@ Act as if you were a black middle aged man from New York! Answer in a single sho
 Please tell us how you feel about the following parties:
 How do you feel towards The Democratic Party? Only respond with exactly one of the following 1: Strongly Dislike|2: Dislike|3: Neiter Dislike nor Like|4: Like|5: Strongly Like.
 ```
-
-Okay, now we prompt the model to only respond with one of the possible answers. Let's see how a small Llama model responds!
+Looks good! Now we prompt the model to only respond with one of the possible answers. Let's see how a small Llama model responds!
 
 
 ```python
@@ -201,7 +204,11 @@ for interview in interviews:
         randomized_item_order=True,
     )
 
-# Finally we get the following prompts
+```
+
+Finally we get our following prompts:
+
+```python
 system_prompt, prompt = interviews[0].get_prompt_for_interview_type()
 print(system_prompt)
 print(prompt)
@@ -219,7 +226,7 @@ You respond with your reasoning and the most probable answer option in the follo
   "answer": <1: Strongly Dislike, 2: Dislike, 3: Neiter Dislike nor Like, 4: Like, 5: Strongly Like>
 }
 ```
-
+```
 We run our survey again:
 
 ```python
@@ -241,7 +248,7 @@ parsed_results = parser.json_parse_all(results)
 df = create_one_dataframe(parsed_results)
 ```
 
-And now we get answers that are more aligned with the free text answers from before but also easily parsable responses. If you are interested in which Response Generation Methods reflect public opinion most closely and also which are most efficient to use, we encourage you to check out this paper: [Survey Response Generation: Generating Closed-Ended Survey Responses In-Silico with Large Language Models](https://arxiv.org/abs/2510.11586).
+And now we get answers that are more aligned with the free text answers from before and are also easily parsable. If you are interested in which Response Generation Methods reflect public opinion most closely and which are most efficient to use, we encourage you to check out this paper: [Survey Response Generation: Generating Closed-Ended Survey Responses In-Silico with Large Language Models](https://arxiv.org/abs/2510.11586).
 
 |interview_name|interview_item_id|question                                                                                                                                                                        |reasoning                                                                                  |answer                    |
 |--------------|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|--------------------------|
