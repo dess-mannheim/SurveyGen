@@ -131,6 +131,8 @@ Well, this is not what we wanted. The small model took the "Only answer with exa
 2. *Use LLM-as-a-judge.* We can give the output to another LLM and try to get our labels this way.
 3. *Use Guided Decoding.* We can restrict the models output to ensure that our models only respond in a certain way.
 
+### Restricting Model Output
+
 SurveyGen supports all of these methods. For now, let's take a look at restricting the models output. For this we can simply give another option to the ``SurveyOptionGenerator`` we used before and prepare the interviews again.
 
 ```python
