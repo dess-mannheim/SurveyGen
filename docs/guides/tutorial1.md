@@ -89,7 +89,7 @@ print(system_prompt)
 print(prompt)
 ```
 
-```txt
+```
 Act as if you were a black middle aged man from New York! Answer in a single short sentence.
 Please tell us how you feel about the following parties:
 How do you feel towards The Democratic Party? Only respond with exactly one of the following 1: Strongly Dislike|2: Dislike|3: Neiter Dislike nor Like|4: Like|5: Strongly Like.
@@ -216,7 +216,7 @@ print(system_prompt)
 print(prompt)
 ```
 
-```txt
+```
 Act as if you were a black middle aged man from New York!
 Please tell us how you feel about the following parties:
 How do you feel towards The Republican Party? Only respond with exactly one of the following 1: Strongly Dislike|2: Dislike|3: Neiter Dislike nor Like|4: Like|5: Strongly Like.

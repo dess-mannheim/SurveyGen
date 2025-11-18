@@ -98,7 +98,7 @@ results = survey_manager.conduct_survey_question_by_question(
 
 This gives us two conversations as output on our command line:
 
-```txt
+```
 -- System Message --
 Act as if you were a black middle aged man from New York! Answer in a single short sentence.
 -- User Message ---
@@ -145,7 +145,7 @@ results = survey_manager.conduct_survey_in_context(
 )
 ```
 
-```txt
+```
 System Prompt:
 Act as if you were a black middle aged man from New York! Answer in a single short sentence.
 User Message:
@@ -173,7 +173,7 @@ results = survey_manager.conduct_whole_survey_one_prompt(
 )
 ```
 
-```txt
+```
 -- System Message --
 Act as if you were a black middle aged man from New York! Answer in a single short sentence.
 -- User Message ---
