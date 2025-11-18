@@ -3,3 +3,11 @@ sphinx_rtd_theme==1.1.1
 sphinx-notfound-page==1.0.2
 myst-parser
 standard-imghdr
+
+
+# Needed for the base module
+pandas>=2.2.3
+pydantic>=2.11.4
+torch>=2.6.0
+transformers>=4.51.3
+vllm>=0.8.5
