@@ -8,10 +8,8 @@
 
 import os
 import sys
-# Make sure the path to your project's source code is on the Python path
-# This is crucial for Sphinx's autodoc extension to find your modules.
-# Replace '../src' with the actual path to your source code directory.
-sys.path.insert(0, os.path.abspath('../src/surveygen'))
+
+sys.path.insert(0, os.path.abspath('../src'))
 
 project = 'SurveyGen'
 copyright = '2025, Maximilian Kreutner'
