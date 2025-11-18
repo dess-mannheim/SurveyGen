@@ -30,10 +30,15 @@ from surveygen.llm_interview import LLMInterview
 from surveygen.utilities import placeholder
 
 
-system_prompt = "Act as if you were a black middle aged man from New York!" 
+system_prompt = "Act as if you were a black middle aged man from New York!"
 prompt = f"Please tell us how you feel about the following parties:\n{placeholder.PROMPT_QUESTIONS}"
 
-interview = LLMInterview(interview_name="political_parties", interview_source=party_questionnaire, system_prompt=system_prompt, prompt=prompt)
+interview = LLMInterview(
+    interview_name="political_parties",
+    interview_source=party_questionnaire,
+    system_prompt=system_prompt,
+    prompt=prompt,
+)
 ```
 
 That's it! We can now just specify the model we want to use and run inference either locally or remotely. For both options, the code changes only slightly.
