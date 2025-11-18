@@ -216,7 +216,7 @@ class JSONSingleResponseGenerationMethod(JSONResponseGenerationMethod):
         automatic_output_instructions: bool = False,
         output_index_only: bool = False,
     ):
-        """Answer Production Method: Structured Outputs"""
+        """Response Generation Method: Structured Outputs"""
 
         super().__init__(
             json_fields={"answer": constants.OPTIONS_ADJUST},
@@ -234,7 +234,7 @@ class JSONReasoningResponseGenerationMethod(JSONResponseGenerationMethod):
         automatic_output_instructions: bool = False,
         output_index_only: bool = False,
     ):
-        """Answer Production Method: Structured Outputs with Reasoning"""
+        """Response Generation Method: Structured Outputs with Reasoning"""
 
         json_fields = {
             "reasoning": "your reasoning about the answer options",
@@ -257,7 +257,7 @@ class JSONAllOptionsResponseGenerationMethod(JSONResponseGenerationMethod):
         automatic_system_prompt: bool = False,
         output_index_only: bool = False,
     ):
-        """Answer Production Method: Structured Outputs All Options"""
+        """Response Generation Method: Structured Outputs All Options"""
 
         super().__init__(
             # will be set when given to answer options

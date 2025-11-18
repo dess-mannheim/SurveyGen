@@ -2,20 +2,20 @@ import pandas as pd
 from typing import Dict, Any
 import re
 
-def extract_number_manual(key: str) -> int | None:
-    i = len(key) - 1
-    while i >= 0 and key[i].isdigit():
-        i -= 1
-    number_part = key[i + 1 :]
-    return int(number_part) if number_part else None
-
 
 def create_one_dataframe(parsed_results: Dict[Any, pd.DataFrame]) -> pd.DataFrame:
-    """
-    Joins a dictionary of DataFrames into a single DataFrame.
+    """Concatenates a dictionary of DataFrames into a single DataFrame.
 
-    - The dictionary key's 'interview_name' attribute is added as the first column.
-    - Handles different columns across DataFrames by creating a union of all columns.
+    Args:
+        parsed_results (Dict[Any, pd.DataFrame]): A dictionary mapping objects
+            to DataFrames. Each key must be an object that has an
+            `interview_name` attribute (e.g., a custom class instance). The
+            values are the pandas DataFrames to be merged.
+
+    Returns:
+        pd.DataFrame: A single DataFrame containing the vertically concatenated
+        data from all input DataFrames. Returns an empty DataFrame if the
+        input dictionary is empty.
     """
     dataframes_to_concat = []
     

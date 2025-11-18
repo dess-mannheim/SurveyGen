@@ -26,6 +26,7 @@ PARSED_RESPONSE: Final[str] = "parsed_response"
 # Structured Output constraints
 OPTIONS_ADJUST: List[str] = ["OPTIONS_ADJUST"]
 
+
 class InterviewType(Enum):
     QUESTION: str = "interview_type_question"
     CONTEXT: str = "interview_type_context"

@@ -9,12 +9,12 @@ import numpy as np
 import asyncio
 import threading
 
-from openai import OpenAI, AsyncOpenAI
+from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
-from typing import Any, List, Optional, Union, Dict, Literal
+from typing import Any, List, Optional, Union, Dict
 
-from .dynamic_pydantic import generate_pydantic_model
+from .dynamic_pydantic import _generate_pydantic_model
 from .response_generation import (
     ResponseGenerationMethod,
     JSONResponseGenerationMethod,
@@ -210,10 +210,8 @@ def batch_generation(
             )
             plain_results.append(output_text.split(reasoning_end_token)[-1].strip())
 
-        
-
         for rgm in response_generation_method:
-            #TODO This is not implemented correcty yet
+            # TODO This is not implemented correcty yet
             if isinstance(rgm, LogprobResponseGenerationMethod):
                 logprob_result = []
                 # ignore the first k tokens that belong to the reasoning
@@ -234,9 +232,7 @@ def batch_generation(
                         for _reasoning in raw_reasonings
                     ]
                 else:
-                    logprob_positions = [rgm.token_position] * len(
-                        outputs
-                    )
+                    logprob_positions = [rgm.token_position] * len(outputs)
 
                 for req_output, logprob_position in zip(outputs, logprob_positions):
                     try:
@@ -248,7 +244,9 @@ def batch_generation(
                             .logprobs[logprob_position]
                             .values()
                         }
-                    except IndexError:  # less than [logprob_position] tokens in the output!
+                    except (
+                        IndexError
+                    ):  # less than [logprob_position] tokens in the output!
                         answer_dict = {}
                     logprob_result.append(answer_dict)
 
@@ -360,7 +358,7 @@ def _structured_sampling_params(
 
     if isinstance(response_generation_method, ResponseGenerationMethod):
         if isinstance(response_generation_method, JSONResponseGenerationMethod):
-            pydantic_model = generate_pydantic_model(
+            pydantic_model = _generate_pydantic_model(
                 fields=response_generation_method.json_fields,
                 constraints=response_generation_method.constraints,
             )
@@ -397,7 +395,7 @@ def _structured_sampling_params(
                 key = _make_cache_key(fields, cons)
 
                 if key not in cache:
-                    pydantic_model = generate_pydantic_model(
+                    pydantic_model = _generate_pydantic_model(
                         fields=fields, constraints=cons
                     )
                     json_schema = pydantic_model.model_json_schema()
@@ -435,7 +433,6 @@ def _structured_sampling_params(
                 guided_decoding=guided_decodings[i],
                 **generation_kwargs,
             )
-
             for i in range(batch_size)
         ]
     elif use_vllm:

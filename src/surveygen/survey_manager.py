@@ -62,7 +62,7 @@ from .inference.response_generation import (
 
 from .llm_interview import LLMInterview, InterviewType
 
-from .utilities.survey_objects import AnswerOptions, InferenceOptions, InterviewResult
+from .utilities.survey_objects import AnswerOptions, InterviewResult
 
 from vllm import LLM
 

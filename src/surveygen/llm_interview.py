@@ -2,7 +2,7 @@ from typing import List, Dict, Optional, Union, overload, Self, Tuple
 
 from dataclasses import replace
 
-from .utilities.survey_objects import AnswerOptions, InterviewItem, InferenceOptions
+from .utilities.survey_objects import AnswerOptions, InterviewItem
 
 from .utilities import constants, placeholder
 from .utilities.constants import InterviewType
@@ -92,31 +92,6 @@ class LLMInterview:
             LLMInterview: A deep copy of the current object.
         """
         return copy.deepcopy(self)
-
-    # Visualization which is not necessary. Use get_prompt_for_interview_type instead.
-    # def get_prompt_structure(self) -> str:
-    #     """
-    #     Generate a prompt structure for the first question, including system prompt and instructions.
-
-    #     Returns:
-    #         str: The full prompt as a string.
-    #     """
-    #     parts = [
-    #         "SYSTEM PROMPT:",
-    #         self.system_prompt,
-    #         "INTERVIEW INSTRUCTIONS:",
-    #         self.prompt,
-    #     ]
-
-    #     if self._global_options:
-    #         _options_str = self._global_options.create_options_str()
-    #         if _options_str is not None:
-    #             parts.append(_options_str)
-
-    #     parts.append("FIRST QUESTION:")
-    #     parts.append(self.generate_question_prompt(self._questions[0]))
-
-    #     return "\n".join(parts)
 
     def get_prompt_for_interview_type(
         self,

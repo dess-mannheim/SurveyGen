@@ -6,12 +6,21 @@ This guide shows how to setup basic inference with open answers for an LLM to pr
 
 #### General Setup
 
-The simplest way to setup inference with SurveyGen is to define our questionnaire in a ```pd.Dataframe``` or a ```.csv``` file in the following format.
+The simplest way to setup inference with SurveyGen is to define our questionnaire in a ```pd.Dataframe``` or a ```.csv``` file. For this tutorial we assume to have the file *parties.csv* in your project folder with the following structure.
 
 |interview_item_id|question_content               |
 |-----------------|-------------------------------|
 |1                |The Democratic Party?          |
 |2                |The Republican Party?          |
+
+We can then either use ```pandas``` to read the file or give the path directly.
+
+```python
+import pandas as pd
+
+party_questionnaire = pd.read_csv("parties.csv")
+#party_questionnaire = "parties.csv"
+```
 
 
 We use the core LLMInterview class to define how our model should be inferenced. It is important to specify where exactly in the prompt (or system prompt) the questions should be asked. We can do so by specifying placeholders in our prompts.
