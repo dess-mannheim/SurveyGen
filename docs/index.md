@@ -1,6 +1,6 @@
 # SurveyGen
 
-This is the homepage for the project's documentation.
+SurveyGen is a framework to... TODO
 
 ```{toctree}
 :caption: Getting Started
