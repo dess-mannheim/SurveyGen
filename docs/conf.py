@@ -24,7 +24,7 @@ extensions = [
     'sphinx.ext.autodoc',      # Core library to pull documentation from docstrings
     'sphinx.ext.napoleon',     # Support for Google and NumPy style docstrings
     'sphinx.ext.viewcode',     # Add links to highlighted source code
-    'myst_parser',             # To write documentation in Markdown instead of reStructuredText
+    'myst_nb',             # To write documentation in Markdown instead of reStructuredText
 ]
 
 templates_path = ['_templates']
@@ -42,8 +42,11 @@ autodoc_typehints = "description"
 
 source_suffix = {
     '.rst': 'restructuredtext',
-    '.md': 'markdown',
+    '.md': 'myst-nb',
+    '.ipynb': 'myst-nb',
 }
+
+nb_execution_mode = "off"
 
 root_doc = 'index'
 
