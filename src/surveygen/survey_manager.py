@@ -365,7 +365,7 @@ class SurveyOptionGenerator:
     #     return interview_option
 
 
-def conduct_survey_question_by_question(
+def conduct_survey_single_item(
     model: Union[LLM, AsyncOpenAI],
     interviews: Union[LLMInterview, List[LLMInterview]],
     client_model_name: Optional[str] = None,
@@ -560,7 +560,7 @@ def _intermediate_save_path_check(n_save_step: int, intermediate_save_path: str)
             raise ValueError(f"Save path '{intermediate_save_path}' is not writable.")
 
 
-def conduct_whole_survey_one_prompt(
+def conduct_survey_battery(
     model: Union[LLM, AsyncOpenAI],
     interviews: Union[LLMInterview, List[LLMInterview]],
     client_model_name: Optional[str] = None,
@@ -686,7 +686,7 @@ def conduct_whole_survey_one_prompt(
     return survey_results
 
 
-def conduct_survey_in_context(
+def conduct_survey_sequential(
     model: Union[LLM, AsyncOpenAI],
     interviews: Union[LLMInterview, List[LLMInterview]],
     client_model_name: Optional[str] = None,
