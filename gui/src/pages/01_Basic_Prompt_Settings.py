@@ -1,6 +1,6 @@
 import streamlit as st
 from surveygen.llm_interview import LLMInterview
-from surveygen.survey_manager import conduct_survey_question_by_question, conduct_survey_in_context, conduct_whole_survey_one_prompt, SurveyOptionGenerator, SurveyCreator
+from surveygen.survey_manager import conduct_survey_single_item, conduct_survey_sequential, conduct_survey_battery, SurveyOptionGenerator, SurveyCreator
 from surveygen.utilities.constants import InterviewType
 from gui_elements.paginator import paginator
 from gui_elements.stateful_widget import StatefulWidgets

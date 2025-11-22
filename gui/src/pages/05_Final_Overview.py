@@ -17,9 +17,9 @@ from surveygen.parser.llm_answer_parser import raw_responses
 from surveygen.utilities.constants import InterviewType
 from surveygen.utilities.utils import create_one_dataframe
 from surveygen.survey_manager import (
-    conduct_survey_in_context,
-    conduct_whole_survey_one_prompt,
-    conduct_survey_question_by_question,
+    conduct_survey_sequential,
+    conduct_survey_battery,
+    conduct_survey_single_item,
 )
 
 from streamlit.runtime.scriptrunner import add_script_run_ctx
@@ -184,7 +184,7 @@ if st.button("Confirm and Run Survey", type="primary", use_container_width=True)
         # API concurrency should be  configurable in the GUI
         try:
             with redirect_stderr(queue_writer):
-                result = conduct_survey_question_by_question(
+                result = conduct_survey_single_item(
                     client,
                     interviews=interviews,
                     client_model_name=model_name,

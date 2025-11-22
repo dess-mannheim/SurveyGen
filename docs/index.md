@@ -1,10 +1,10 @@
 # SurveyGen
 
-SurveyGen is a framework to... TODO
+SurveyGen is a Python framework designed to facilitate the creation of robust inference experiments with Large Language Models based around questionnaires. It provides a full pipeline from perturbation of prompts, to choosing Response Generation Methods, inferencing and finally parsing of the output. SurveyGen supports both local inference with [vllm](https://github.com/vllm-project/vllm) and remote inference via the [OpenAI API](https://github.com/openai/openai-python).
 
 ```{toctree}
 :caption: Getting Started
-:maxdepth: 2
+:maxdepth: 3
 
 installation
 quickstart
@@ -22,5 +22,4 @@ guides/index
 :maxdepth: 2
 
 api_reference
-```
 ```
