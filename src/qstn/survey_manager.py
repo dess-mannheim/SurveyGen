@@ -58,9 +58,9 @@ from .inference.response_generation import (
     JSONResponseGenerationMethod,
 )
 
-from .llm_interview import LLMInterview, InterviewType
+from .llm_questionnaire import LLMQuestionnaire, QuestionnaireType
 
-from .utilities.survey_objects import AnswerOptions, InterviewResult
+from .utilities.survey_objects import AnswerOptions, QuestionnaireResult
 
 from vllm import LLM
 
@@ -228,7 +228,7 @@ class SurveyOptionGenerator:
             only_scale=only_from_to_scale,
         )
 
-        interview_option = AnswerOptions(
+        questionnaire_options = AnswerOptions(
             answer_texts=answer_texts_object,
             from_to_scale=only_from_to_scale,
             list_prompt_template=list_prompt_template,
@@ -236,7 +236,7 @@ class SurveyOptionGenerator:
             response_generation_method=response_generation_method,
         )
 
-        return interview_option
+        return questionnaire_options
 
     # #TODO: It seems to me like this method and the one above could be merged? (Georg)
     # @staticmethod
@@ -367,7 +367,7 @@ class SurveyOptionGenerator:
 
 def conduct_survey_single_item(
     model: Union[LLM, AsyncOpenAI],
-    interviews: Union[LLMInterview, List[LLMInterview]],
+    questionnaires: Union[LLMQuestionnaire, List[LLMQuestionnaire]],
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
     print_conversation: bool = False,
@@ -378,13 +378,13 @@ def conduct_survey_single_item(
     chat_template: Optional[str] = None,
     chat_template_kwargs: Dict[str, Any] = {},
     **generation_kwargs: Any,
-) -> List[InterviewResult]:
+) -> List[QuestionnaireResult]:
     """
     Conducts a survey by asking questions one at a time.
 
     Args:
         model: LLM instance or AsyncOpenAI client.
-        interviews: Single interview or list of interviews to conduct as a survey.
+        questionnaires: Single questionnaire or list of questionnaires to conduct as a survey.
         answer_production_method: Options for structured output format.
         client_model_name: Name of model when using OpenAI client.
         api_concurrency: Number of concurrent API requests.
@@ -398,53 +398,53 @@ def conduct_survey_single_item(
         **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or  client.chat.completions.create().
 
     Returns:
-        List[InterviewResult]: Results for each interview.
+        List[QuestionnaireResult]: Results for each questionnaire.
     """
 
     _intermediate_save_path_check(n_save_step, intermediate_save_file)
 
-    if isinstance(interviews, LLMInterview):
-        interviews = [interviews]
+    if isinstance(questionnaires, LLMQuestionnaire):
+        questionnaires = [questionnaires]
 
-    max_survey_length: int = max(len(interview._questions) for interview in interviews)
+    max_survey_length: int = max(len(questionnaire._questions) for questionnaire in questionnaires)
     question_llm_response_pairs: List[Dict[int, QuestionLLMResponseTuple]] = []
 
-    for i in range(len(interviews)):
+    for i in range(len(questionnaires)):
         # inference_option = interviews[i]._generate_inference_options()
         # inference_options.append(inference_opti
         question_llm_response_pairs.append({})
 
-    survey_results: List[InterviewResult] = []
+    survey_results: List[QuestionnaireResult] = []
 
     for i in (
-        tqdm(range(max_survey_length), desc="Processing interviews")
+        tqdm(range(max_survey_length), desc="Processing questionnaires")
         if print_progress
         else range(max_survey_length)
     ):
-        current_batch: List[LLMInterview] = [
-            interview for interview in interviews if len(interview._questions) > i
+        current_batch: List[LLMQuestionnaire] = [
+            questionnaire for questionnaire in questionnaires if len(questionnaire._questions) > i
         ]
 
         system_messages, prompts = zip(
             *[
-                interview.get_prompt_for_interview_type(InterviewType.QUESTION, i)
-                for interview in current_batch
+                questionnaire.get_prompt_for_questionnaire_type(QuestionnaireType.SINGLE_ITEM, i)
+                for questionnaire in current_batch
             ]
         )
 
         questions = [
-            interview.generate_question_prompt(
-                interview_question=interview._questions[i]
+            questionnaire.generate_question_prompt(
+                questionnaire_items=questionnaire._questions[i]
             )
-            for interview in current_batch
+            for questionnaire in current_batch
         ]
         response_generation_methods = [
             (
-                interview._questions[i].answer_options.response_generation_method
-                if interview._questions[i].answer_options
+                questionnaire._questions[i].answer_options.response_generation_method
+                if questionnaire._questions[i].answer_options
                 else None
             )
-            for interview in current_batch
+            for questionnaire in current_batch
         ]
 
         output, logprobs, reasoning_output = batch_generation(
@@ -484,21 +484,21 @@ def conduct_survey_single_item(
 
         # TODO: check that this works with logprobs
         _intermediate_saves(
-            interviews,
+            questionnaires,
             n_save_step,
             intermediate_save_file,
             question_llm_response_pairs,
             i,
         )
 
-    for i, survey in enumerate(interviews):
-        survey_results.append(InterviewResult(survey, question_llm_response_pairs[i]))
+    for i, survey in enumerate(questionnaires):
+        survey_results.append(QuestionnaireResult(survey, question_llm_response_pairs[i]))
 
     return survey_results
 
 
 def _intermediate_saves(
-    interviews: List[LLMInterview],
+    questionnaires: List[LLMQuestionnaire],
     n_save_step: int,
     intermediate_save_file: str,
     question_llm_response_pairs: QuestionLLMResponseTuple,
@@ -508,7 +508,7 @@ def _intermediate_saves(
     Internal helper to save intermediate survey results.
 
     Args:
-        interviews: List of interviews being conducted.
+        questionnaires: List of questionnaires being conducted.
         n_save_step: Save frequency in steps.
         intermediate_save_file: Path to save file.
         question_llm_response_pairs: Current responses.
@@ -516,10 +516,10 @@ def _intermediate_saves(
     """
     if n_save_step:
         if i % n_save_step == 0:
-            intermediate_survey_results: List[InterviewResult] = []
-            for j, interview in enumerate(interviews):
+            intermediate_survey_results: List[QuestionnaireResult] = []
+            for j, questionnaire in enumerate(questionnaires):
                 intermediate_survey_results.append(
-                    InterviewResult(interview, question_llm_response_pairs[j])
+                    QuestionnaireResult(questionnaire, question_llm_response_pairs[j])
                 )
             parsed_results = raw_responses(intermediate_survey_results)
             utils.create_one_dataframe(parsed_results).to_csv(intermediate_save_file)
@@ -562,7 +562,7 @@ def _intermediate_save_path_check(n_save_step: int, intermediate_save_path: str)
 
 def conduct_survey_battery(
     model: Union[LLM, AsyncOpenAI],
-    interviews: Union[LLMInterview, List[LLMInterview]],
+    questionnaires: Union[LLMQuestionnaire, List[LLMQuestionnaire]],
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
     n_save_step: Optional[int] = None,
@@ -574,13 +574,13 @@ def conduct_survey_battery(
     chat_template_kwargs: Dict[str, Any] = {},
     item_separator: str = "\n",
     **generation_kwargs: Any,
-) -> List[InterviewResult]:
+) -> List[QuestionnaireResult]:
     """
     Conducts the entire survey in one single LLM prompt.
 
     Args:
         model: LLM instance or AsyncOpenAI client.
-        interviews: Single interview or list of interviews to conduct.
+        questionnaires: Single questionnaire or list of questionnaires to conduct.
         answer_production_method: Options for structured output format.
         client_model_name: Name of model when using OpenAI client.
         api_concurrency: Number of concurrent API requests.
@@ -594,12 +594,12 @@ def conduct_survey_battery(
         **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or  client.chat.completions.create().
 
     Returns:
-        List[InterviewResult]: Results for each interview.
+        List[QuestionnaireResult]: Results for each questionnaire.
     """
     _intermediate_save_path_check(n_save_step, intermediate_save_file)
 
-    if isinstance(interviews, LLMInterview):
-        interviews = [interviews]
+    if isinstance(questionnaires, LLMQuestionnaire):
+        questionnaires = [questionnaires]
     # inference_options: List[InferenceOptions] = []
 
     # We always conduct the survey in one prompt
@@ -609,36 +609,36 @@ def conduct_survey_battery(
 
     # if print_progress:
     #     print("Constructing prompts")
-    for i in range(len(interviews)):
+    for i in range(len(questionnaires)):
         question_llm_response_pairs.append({})
 
-    survey_results: List[InterviewResult] = []
+    survey_results: List[QuestionnaireResult] = []
 
     for i in (
-        tqdm(range(max_survey_length), desc="Processing interviews")
+        tqdm(range(max_survey_length), desc="Processing questionnaires")
         if print_progress
         else range(max_survey_length)
     ):
         current_batch = [
-            interview for interview in interviews if len(interview._questions) > i
+            questionnaire for questionnaire in questionnaires if len(questionnaire._questions) > i
         ]
 
         system_messages, prompts = zip(
             *[
-                interview.get_prompt_for_interview_type(InterviewType.ONE_PROMPT, i)
-                for interview in current_batch
+                questionnaire.get_prompt_for_questionnaire_type(QuestionnaireType.BATTERY, i)
+                for questionnaire in current_batch
             ]
         )
         # questions = [interview.generate_question_prompt(interview_question=interview._questions[i]) for interview in current_batch]
         response_generation_methods: List[ResponseGenerationMethod] = []
-        for interview in current_batch:
-            if interview._questions[i].answer_options:
-                response_generation_method = interview._questions[
+        for questionnaire in current_batch:
+            if questionnaire._questions[i].answer_options:
+                response_generation_method = questionnaire._questions[
                     i
                 ].answer_options.response_generation_method
                 if isinstance(response_generation_method, JSONResponseGenerationMethod):
                     response_generation_method = response_generation_method.create_new_rgm_with_multiple_questions(
-                        questions=interview._questions
+                        questions=questionnaire._questions
                     )
                 response_generation_methods.append(response_generation_method)
 
@@ -673,22 +673,22 @@ def conduct_survey_battery(
             )
 
         _intermediate_saves(
-            interviews,
+            questionnaires,
             n_save_step,
             intermediate_save_file,
             question_llm_response_pairs,
             i,
         )
 
-    for i, survey in enumerate(interviews):
-        survey_results.append(InterviewResult(survey, question_llm_response_pairs[i]))
+    for i, survey in enumerate(questionnaires):
+        survey_results.append(QuestionnaireResult(survey, question_llm_response_pairs[i]))
 
     return survey_results
 
 
 def conduct_survey_sequential(
     model: Union[LLM, AsyncOpenAI],
-    interviews: Union[LLMInterview, List[LLMInterview]],
+    questionnaires: Union[LLMQuestionnaire, List[LLMQuestionnaire]],
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
     print_conversation: bool = False,
@@ -697,13 +697,13 @@ def conduct_survey_sequential(
     intermediate_save_file: Optional[str] = None,
     seed: int = 42,
     **generation_kwargs: Any,
-) -> List[InterviewResult]:
+) -> List[QuestionnaireResult]:
     """
     Conducts surveys using in-context learning approach.
 
     Args:
         model: LLM instance or AsyncOpenAI client.
-        interviews: Single interview or list of interviews to conduct.
+        questionnaires: Single questionnaire or list of questionnaires to conduct.
         answer_production_method: Options for structured output format.
         client_model_name: Name of model when using OpenAI client.
         api_concurrency: Number of concurrent API requests.
@@ -715,35 +715,35 @@ def conduct_survey_sequential(
         **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or  client.chat.completions.create().
 
     Returns:
-        List[InterviewResult]: Results for each interview.
+        List[QuestionnaireResult]: Results for each questionnaire.
     """
     _intermediate_save_path_check(n_save_step, intermediate_save_file)
-    if isinstance(interviews, LLMInterview):
-        interviews = [interviews]
+    if isinstance(questionnaires, LLMQuestionnaire):
+        questionnaires = [questionnaires]
 
-    max_survey_length: int = max(len(interview._questions) for interview in interviews)
+    max_survey_length: int = max(len(questionnaire._questions) for questionnaire in questionnaires)
 
     question_llm_response: List[Dict[int, QuestionLLMResponseTuple]] = []
 
-    for i in range(len(interviews)):
+    for i in range(len(questionnaires)):
         question_llm_response.append({})
 
-    survey_results: List[InterviewResult] = []
+    survey_results: List[QuestionnaireResult] = []
 
     all_prompts: List[List[str]] = []
     assistant_messages: List[List[str]] = []
 
-    for i in range(len(interviews)):
+    for i in range(len(questionnaires)):
         assistant_messages.append([])
         all_prompts.append([])
 
     for i in (
-        tqdm(range(max_survey_length), desc="Processing interviews")
+        tqdm(range(max_survey_length), desc="Processing questionnaires")
         if print_progress
         else range(max_survey_length)
     ):
         current_batch = [
-            interview for interview in interviews if len(interview._questions) > i
+            questionnaire for questionnaire in questionnaires if len(questionnaire._questions) > i
         ]
 
         first_question: bool = i == 0
@@ -751,38 +751,38 @@ def conduct_survey_sequential(
         if first_question:
             system_messages, prompts = zip(
                 *[
-                    interview.get_prompt_for_interview_type(InterviewType.CONTEXT, i)
-                    for interview in current_batch
+                    questionnaire.get_prompt_for_questionnaire_type(QuestionnaireType.SEQUENTIAL, i)
+                    for questionnaire in current_batch
                 ]
             )
             questions = [
-                interview.generate_question_prompt(
-                    interview_question=interview._questions[i]
+                questionnaire.generate_question_prompt(
+                    questionnaire_items=questionnaire._questions[i]
                 )
-                for interview in current_batch
+                for questionnaire in current_batch
             ]
         else:
             system_messages, _ = zip(
                 *[
-                    interview.get_prompt_for_interview_type(InterviewType.CONTEXT, i)
-                    for interview in current_batch
+                    questionnaire.get_prompt_for_questionnaire_type(QuestionnaireType.SEQUENTIAL, i)
+                    for questionnaire in current_batch
                 ]
             )
             prompts = [
-                interview.generate_question_prompt(
-                    interview_question=interview._questions[i]
+                questionnaire.generate_question_prompt(
+                    questionnaire_items=questionnaire._questions[i]
                 )
-                for interview in current_batch
+                for questionnaire in current_batch
             ]
             questions = prompts
 
         response_generation_methods = [
             (
-                interview._questions[i].answer_options.response_generation_method
-                if interview._questions[i].answer_options
+                questionnaire._questions[i].answer_options.response_generation_method
+                if questionnaire._questions[i].answer_options
                 else None
             )
-            for interview in current_batch
+            for questionnaire in current_batch
         ]
 
         for c in range(len(current_batch)):
@@ -871,11 +871,11 @@ def conduct_survey_sequential(
         # assistant_messages.append(output)
 
         _intermediate_saves(
-            interviews, n_save_step, intermediate_save_file, question_llm_response, i
+            questionnaires, n_save_step, intermediate_save_file, question_llm_response, i
         )
 
-    for i, survey in enumerate(interviews):
-        survey_results.append(InterviewResult(survey, question_llm_response[i]))
+    for i, survey in enumerate(questionnaires):
+        survey_results.append(QuestionnaireResult(survey, question_llm_response[i]))
 
     return survey_results
 
@@ -884,15 +884,15 @@ class SurveyCreator:
     @classmethod
     def from_path(
         self, survey_path: str, questionnaire_path: str
-    ) -> List[LLMInterview]:
+    ) -> List[LLMQuestionnaire]:
         """
-        Generates LLMInterview objects from a CSV file path.
+        Generates LLMQuestionnaire objects from a CSV file path.
 
         Args:
             survey_path: The path to the CSV file.
 
         Returns:
-            A list of LLMInterview objects.
+            A list of LLMQuestionnaire objects.
         """
         df = pd.read_csv(survey_path)
         df_questionnaire = pd.read_csv(questionnaire_path)
@@ -901,41 +901,41 @@ class SurveyCreator:
     @classmethod
     def from_dataframe(
         self, survey_dataframe: pd.DataFrame, questionnaire_dataframe: pd.DataFrame
-    ) -> List[LLMInterview]:
+    ) -> List[LLMQuestionnaire]:
         """
-        Generates LLMInterview objects from a pandas DataFrame.
+        Generates LLMQuestionnaire objects from a pandas DataFrame.
 
         Args:
             survey_dataframe: A DataFrame containing the survey data.
 
         Returns:
-            A list of LLMInterview objects.
+            A list of LLMQuestionnaire objects.
         """
         return self._from_dataframe(survey_dataframe, questionnaire_dataframe)
 
     @classmethod
-    def _create_interview(self, row: pd.Series, df_questionnaire) -> LLMInterview:
+    def _create_questionnaire(self, row: pd.Series, df_questionnaire) -> LLMQuestionnaire:
         """
         Internal helper method to process the DataFrame.
         """
-        return LLMInterview(
-            interview_source=df_questionnaire,
-            interview_name=row[constants.INTERVIEW_NAME],
+        return LLMQuestionnaire(
+            questionnaire_source=df_questionnaire,
+            questionnaire_name=row[constants.QUESTIONNAIRE_NAME],
             system_prompt=row[constants.SYSTEM_PROMPT_FIELD],
-            prompt=row[constants.INTERVIEW_INSTRUCTION_FIELD],
+            prompt=row[constants.QUESTIONNAIRE_INSTRUCTION_FIELD],
         )
 
     @classmethod
     def _from_dataframe(
         self, df: pd.DataFrame, df_questionnaire: pd.DataFrame
-    ) -> List[LLMInterview]:
+    ) -> List[LLMQuestionnaire]:
         """
         Internal helper method to process the DataFrame.
         """
-        interviews = df.apply(
-            lambda row: self._create_interview(row, df_questionnaire), axis=1
+        questionnaires = df.apply(
+            lambda row: self._create_questionnaire(row, df_questionnaire), axis=1
         )
-        return interviews.to_list()
+        return questionnaires.to_list()
 
 
 if __name__ == "__main__":

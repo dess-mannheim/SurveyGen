@@ -22,7 +22,7 @@ def create_one_dataframe(parsed_results: Dict[Any, pd.DataFrame]) -> pd.DataFram
     for key, df in parsed_results.items():
         temp_df = df.copy()
 
-        temp_df.insert(0, "interview_name", key.interview_name)
+        temp_df.insert(0, "questionnaire_name", key.questionnaire_name)
 
         dataframes_to_concat.append(temp_df)
     if not dataframes_to_concat:

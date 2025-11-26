@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -21,11 +21,22 @@ dependencies = [
     "json_repair"
 ]
 
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+
 [project.optional-dependencies]
 flash = [
     "flashinfer-python>=0.2.5"
 ]
 
-
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/dess-mannheim/QSTN"
+Documentation = "https://qstn.readthedocs.io/en/latest/index.html"

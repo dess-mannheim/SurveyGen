@@ -2,10 +2,10 @@ from typing import List, Dict, Optional, Union, overload, Self, Tuple
 
 from dataclasses import replace
 
-from .utilities.survey_objects import AnswerOptions, InterviewItem
+from .utilities.survey_objects import AnswerOptions, QuestionnaireItem
 
 from .utilities import constants, placeholder
-from .utilities.constants import InterviewType
+from .utilities.constants import QuestionnaireType
 
 from .utilities.utils import safe_format_with_regex
 
@@ -19,7 +19,7 @@ import copy
 from transformers import AutoTokenizer
 
 
-class LLMInterview:
+class LLMQuestionnaire:
     """
     Main class for setting up and managing an LLM-based interview or survey.
 
@@ -27,7 +27,7 @@ class LLMInterview:
     and generating prompt structures for different interview types.
     """
 
-    DEFAULT_INTERVIEW_ID: str = "Interview"
+    DEFAULT_QUESTIONNAIRE_ID: str = "Questionnaire"
 
     DEFAULT_SYSTEM_PROMPT: str = (
         "You will be given questions and possible answer options for each. Please reason about each question before answering."
@@ -42,8 +42,8 @@ class LLMInterview:
 
     def __init__(
         self,
-        interview_source=Union[str, pd.DataFrame],
-        interview_name: str = DEFAULT_INTERVIEW_ID,
+        questionnaire_source=Union[str, pd.DataFrame],
+        questionnaire_name: str = DEFAULT_QUESTIONNAIRE_ID,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         prompt: str = DEFAULT_PROMPT_STRUCTURE,
         verbose=False,
@@ -53,7 +53,7 @@ class LLMInterview:
         Initialize an LLMInterview instance. Either a path to a csv file or a pandas dataframe has to be provided
 
         Args:
-            interview_path (str): Path to the CSV file containing the interview structure and questions.
+            questionnaire_source (str): Path to the CSV file containing the interview structure and questions.
             interview_dataframe (pd.Dataframe): A pandas dataframe interview structure and questions.
             interview_name (str): Name/ID for the interview.
             system_prompt (str): System prompt to prepend to all questions.
@@ -63,14 +63,14 @@ class LLMInterview:
         """
         random.seed(seed)
 
-        if interview_source is None:
+        if questionnaire_source is None:
             raise ValueError("Either a path or a dataframe have to be provided")
 
-        self.load_interview_format(interview_source=interview_source)
+        self.load_questionnaire_format(questionnaire_source=questionnaire_source)
 
         self.verbose: bool = verbose
 
-        self.interview_name: str = interview_name
+        self.questionnaire_name: str = questionnaire_name
 
         self.system_prompt: str = system_prompt
         self.prompt: str = prompt
@@ -82,13 +82,13 @@ class LLMInterview:
         Create a deep copy of the current interview instance.
 
         Returns:
-            LLMInterview: A deep copy of the current object.
+            LLMQuestionnaire: A deep copy of the current object.
         """
         return copy.deepcopy(self)
 
-    def get_prompt_for_interview_type(
+    def get_prompt_for_questionnaire_type(
         self,
-        interview_type: InterviewType = InterviewType.QUESTION,
+        questionnaire_type: QuestionnaireType = QuestionnaireType.SINGLE_ITEM,
         item_id: int = 0,
         item_separator: str = "\n",
     ) -> Tuple[str, str]:
@@ -104,8 +104,8 @@ class LLMInterview:
         options = ""
         automatic_output_instructions = ""
         if (
-            interview_type == InterviewType.QUESTION
-            or interview_type == InterviewType.CONTEXT
+            questionnaire_type == QuestionnaireType.SINGLE_ITEM
+            or questionnaire_type == QuestionnaireType.SEQUENTIAL
         ):
             question = self.generate_question_prompt(self._questions[item_id])
 
@@ -127,7 +127,7 @@ class LLMInterview:
                 placeholder.PROMPT_AUTOMATIC_OUTPUT_INSTRUCTIONS: automatic_output_instructions,
             }
 
-        elif interview_type == InterviewType.ONE_PROMPT:
+        elif questionnaire_type == QuestionnaireType.BATTERY:
             all_questions: List[str] = []
             for question in self._questions:
                 current_question_prompt = self.generate_question_prompt(question)
@@ -171,7 +171,7 @@ class LLMInterview:
         return system_prompt, prompt
 
     def calculate_input_token_estimate(
-        self, model_id: str, interview_type: InterviewType = InterviewType.QUESTION
+        self, model_id: str, questionnaire_type: QuestionnaireType = QuestionnaireType.SINGLE_ITEM
     ) -> int:
         """
         Estimate the number of input tokens for the prompt, given a model and interview type.
@@ -186,8 +186,8 @@ class LLMInterview:
             int: Estimated number of input tokens.
         """
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        system_prompt, prompt = self.get_prompt_for_interview_type(
-            interview_type=interview_type
+        system_prompt, prompt = self.get_prompt_for_questionnaire_type(
+            questionnaire_type=questionnaire_type
         )
         system_tokens = tokenizer.encode(system_prompt)
         tokens = tokenizer.encode(prompt)
@@ -195,11 +195,11 @@ class LLMInterview:
 
         return (
             total_tokens
-            if interview_type != InterviewType.CONTEXT
+            if questionnaire_type != QuestionnaireType.SEQUENTIAL
             else len(total_tokens) * 3
         )
 
-    def get_survey_questions(self) -> str:
+    def get_questions(self) -> str:
         """
         Get the list of loaded interview questions.
 
@@ -208,7 +208,7 @@ class LLMInterview:
         """
         return self._questions
 
-    def load_interview_format(self, interview_source: Union[str, pd.DataFrame]) -> Self:
+    def load_questionnaire_format(self, questionnaire_source: Union[str, pd.DataFrame]) -> Self:
         """
         Load interview questions from a CSV file.
 
@@ -221,43 +221,43 @@ class LLMInterview:
         Returns:
             Self: The updated instance with loaded questions.
         """
-        interview_questions: List[InterviewItem] = []
+        questionnaire_questions: List[QuestionnaireItem] = []
 
-        if interview_source is None:
+        if questionnaire_source is None:
             raise ValueError("Either a path or a dataframe have to be provided")
 
-        if type(interview_source) == pd.DataFrame:
-            df = interview_source
+        if type(questionnaire_source) == pd.DataFrame:
+            df = questionnaire_source
         else:
-            df = pd.read_csv(interview_source)
+            df = pd.read_csv(questionnaire_source)
 
         for _, row in df.iterrows():
-            interview_item_id = row[constants.INTERVIEW_ITEM_ID]
+            questionnaire_item_id = row[constants.QUESTIONNAIRE_ITEM_ID]
             # if constants.QUESTION in df.columns:
             #     question = row[constants.QUESTION]
             if constants.QUESTION_CONTENT in df.columns:
-                interview_question_content = row[constants.QUESTION_CONTENT]
+                questionnaire_question_content = row[constants.QUESTION_CONTENT]
             else:
-                interview_question_content = None
+                questionnaire_question_content = None
 
             if constants.QUESTION_STEM in df.columns:
-                interview_question_stem = row[constants.QUESTION_STEM]
+                question_stem = row[constants.QUESTION_STEM]
             else:
-                interview_question_stem = None
+                question_stem = None
 
-            generated_interview_question = InterviewItem(
-                item_id=interview_item_id,
-                question_content=interview_question_content,
-                question_stem=interview_question_stem,
+            generated_questionnaire_question = QuestionnaireItem(
+                item_id=questionnaire_item_id,
+                question_content=questionnaire_question_content,
+                question_stem=question_stem,
             )
-            interview_questions.append(generated_interview_question)
+            questionnaire_questions.append(generated_questionnaire_question)
 
-        self._questions = interview_questions
+        self._questions = questionnaire_questions
         return self
 
     # TODO Item order could be given by ids
     @overload
-    def prepare_interview(
+    def prepare_questionnaire(
         self,
         question_stem: Optional[str] = None,
         answer_options: Optional[AnswerOptions] = None,
@@ -266,7 +266,7 @@ class LLMInterview:
     ) -> Self: ...
 
     @overload
-    def prepare_interview(
+    def prepare_questionnaire(
         self,
         question_stem: Optional[List[str]] = None,
         answer_options: Optional[Dict[int, AnswerOptions]] = None,
@@ -274,7 +274,7 @@ class LLMInterview:
         randomized_item_order: bool = False,
     ) -> Self: ...
 
-    def prepare_interview(
+    def prepare_questionnaire(
         self,
         question_stem: Optional[Union[str, List[str]]] = None,
         answer_options: Optional[Union[AnswerOptions, Dict[int, AnswerOptions]]] = None,
@@ -295,12 +295,12 @@ class LLMInterview:
         Returns:
             Self: The updated instance with prepared questions.
         """
-        interview_questions: List[InterviewItem] = self._questions
+        questionnaire_questions: List[QuestionnaireItem] = self._questions
 
         prompt_list = isinstance(question_stem, list)
         if prompt_list:
             assert len(question_stem) == len(
-                interview_questions
+                questionnaire_questions
             ), "If a list of question stems is given, length of prompt and survey questions have to be the same"
 
         options_dict = False
@@ -312,7 +312,7 @@ class LLMInterview:
             self._same_options = False
             options_dict = True
 
-        updated_questions: List[InterviewItem] = []
+        updated_questions: List[QuestionnaireItem] = []
 
         if not prefilled_responses:
             prefilled_responses = {}
@@ -321,67 +321,67 @@ class LLMInterview:
 
         if not prompt_list and not options_dict:
             updated_questions = []
-            for i in range(len(interview_questions)):
-                new_interview_question = replace(
-                    interview_questions[i],
+            for i in range(len(questionnaire_questions)):
+                new_questionnaire_question = replace(
+                    questionnaire_questions[i],
                     question_stem=(
                         question_stem
                         if question_stem
-                        else interview_questions[i].question_stem
+                        else questionnaire_questions[i].question_stem
                     ),
                     answer_options=answer_options,
                     prefilled_response=prefilled_responses.get(
-                        interview_questions[i].item_id
+                        questionnaire_questions[i].item_id
                     ),
                 )
-                updated_questions.append(new_interview_question)
+                updated_questions.append(new_questionnaire_question)
 
         elif not prompt_list and options_dict:
-            for i in range(len(interview_questions)):
-                new_interview_question = replace(
-                    interview_questions[i],
+            for i in range(len(questionnaire_questions)):
+                new_questionnaire_question = replace(
+                    questionnaire_questions[i],
                     question_stem=(
                         question_stem
                         if question_stem
-                        else interview_questions[i].question_stem
+                        else questionnaire_questions[i].question_stem
                     ),
-                    answer_options=answer_options.get(interview_questions[i].item_id),
+                    answer_options=answer_options.get(questionnaire_questions[i].item_id),
                     prefilled_response=prefilled_responses.get(
-                        interview_questions[i].item_id
+                        questionnaire_questions[i].item_id
                     ),
                 )
-                updated_questions.append(new_interview_question)
+                updated_questions.append(new_questionnaire_question)
 
         elif prompt_list and not options_dict:
-            for i in range(len(interview_questions)):
-                new_interview_question = replace(
-                    interview_questions[i],
+            for i in range(len(questionnaire_questions)):
+                new_questionnaire_question = replace(
+                    questionnaire_questions[i],
                     question_stem=(
                         question_stem[i]
                         if question_stem
-                        else interview_questions[i].question_stem
+                        else questionnaire_questions[i].question_stem
                     ),
                     answer_options=answer_options,
                     prefilled_response=prefilled_responses.get(
-                        interview_questions[i].item_id
+                        questionnaire_questions[i].item_id
                     ),
                 )
-                updated_questions.append(new_interview_question)
+                updated_questions.append(new_questionnaire_question)
         elif prompt_list and options_dict:
-            for i in range(len(interview_questions)):
-                new_interview_question = replace(
-                    interview_questions[i],
+            for i in range(len(questionnaire_questions)):
+                new_questionnaire_question = replace(
+                    questionnaire_questions[i],
                     question_stem=(
                         question_stem[i]
                         if question_stem
-                        else interview_questions[i].question_stem
+                        else questionnaire_questions[i].question_stem
                     ),
-                    answer_options=answer_options.get(interview_questions[i].item_id),
+                    answer_options=answer_options.get(questionnaire_questions[i].item_id),
                     prefilled_response=prefilled_responses.get(
-                        interview_questions[i].item_id
+                        questionnaire_questions[i].item_id
                     ),
                 )
-                updated_questions.append(new_interview_question)
+                updated_questions.append(new_questionnaire_question)
 
         if randomized_item_order:
             random.shuffle(updated_questions)
@@ -389,7 +389,7 @@ class LLMInterview:
         self._questions = updated_questions
         return self
 
-    def generate_question_prompt(self, interview_question: InterviewItem) -> str:
+    def generate_question_prompt(self, questionnaire_items: QuestionnaireItem) -> str:
         """
         Generate the prompt string for a single interview question.
 
@@ -400,20 +400,20 @@ class LLMInterview:
             str: The formatted prompt for the question.
         """
 
-        if interview_question.question_stem:
-            if placeholder.QUESTION_CONTENT in interview_question.question_stem:
+        if questionnaire_items.question_stem:
+            if placeholder.QUESTION_CONTENT in questionnaire_items.question_stem:
                 format_dict = {
-                    placeholder.QUESTION_CONTENT: interview_question.question_content
+                    placeholder.QUESTION_CONTENT: questionnaire_items.question_content
                 }
                 question_prompt = safe_format_with_regex(
-                    interview_question.question_stem, format_dict
+                    questionnaire_items.question_stem, format_dict
                 )
             else:
-                question_prompt = f"""{interview_question.question_stem} {interview_question.question_content}"""
+                question_prompt = f"""{questionnaire_items.question_stem} {questionnaire_items.question_content}"""
         else:
-            question_prompt = f"""{interview_question.question_content}"""
-        if interview_question.answer_options:
-            _options_str = interview_question.answer_options.create_options_str()
+            question_prompt = f"""{questionnaire_items.question_content}"""
+        if questionnaire_items.answer_options:
+            _options_str = questionnaire_items.answer_options.create_options_str()
             if _options_str is not None:
                 safe_formatter = {placeholder.PROMPT_OPTIONS: _options_str}
                 question_prompt = safe_format_with_regex(

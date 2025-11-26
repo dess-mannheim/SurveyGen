@@ -14,7 +14,7 @@ import pandas as pd
 from dataclasses import dataclass
 
 if TYPE_CHECKING:
-    from ..llm_interview import LLMInterview
+    from ..llm_questionnaire import LLMQuestionnaire
 
 
 
@@ -253,12 +253,12 @@ class QuestionLLMResponseTuple(NamedTuple):
 
 
 @dataclass
-class InterviewResult:
-    """Contains an interview and the corresponding responses by the LLM.
+class QuestionnaireResult:
+    """Contains an questionnaire and the corresponding responses by the LLM.
     Can return results as a dataframe or return the transcript of all questions and answers.
     """
 
-    interview: "LLMInterview"
+    questionnaire: "LLMQuestionnaire"
     results: Dict[int, QuestionLLMResponseTuple]
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -267,7 +267,7 @@ class InterviewResult:
             answers.append((item_id, *question_llm_response_tuple))
         return pd.DataFrame(
             answers,
-            columns=[constants.INTERVIEW_ITEM_ID, *question_llm_response_tuple._fields],
+            columns=[constants.QUESTIONNAIRE_ITEM_ID, *question_llm_response_tuple._fields],
         )
 
     def get_questions_transcript(self) -> str:
@@ -275,7 +275,7 @@ class InterviewResult:
 
         for i, (_, question_llm_response_tuple) in enumerate(self.results.items()):
             parts.append(
-                self.interview.generate_question_prompt(self.interview._questions[i])
+                self.questionnaire.generate_question_prompt(self.questionnaire._questions[i])
             )
             parts.append(question_llm_response_tuple.llm_response)
 
@@ -283,8 +283,8 @@ class InterviewResult:
 
 
 @dataclass
-class InterviewItem:
-    """Represents a single survey question."""
+class QuestionnaireItem:
+    """Represents a single questionnaire item."""
 
     item_id: int
     question_content: str

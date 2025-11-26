@@ -4,10 +4,10 @@ from enum import Enum
 
 # Survey Item
 SYSTEM_PROMPT_FIELD: Final[str] = "system_prompt"
-INTERVIEW_INSTRUCTION_FIELD: Final[str] = "interview_instruction"
-INTERVIEW_ITEM_ID: Final[str] = "interview_item_id"
-INTERVIEW_ITEM: Final[str] = "interview_item"
-INTERVIEW_NAME: Final[str] = "interview_name"
+QUESTIONNAIRE_INSTRUCTION_FIELD: Final[str] = "questionnaire_instruction"
+QUESTIONNAIRE_ITEM_ID: Final[str] = "questionnaire_item_id"
+QUESTIONNAIRE_ITEM: Final[str] = "questionnaire_item"
+QUESTIONNAIRE_NAME: Final[str] = "questionnaire_name"
 
 # Question
 QUESTION_STEM: Final[str] = "question_stem"
@@ -27,10 +27,10 @@ PARSED_RESPONSE: Final[str] = "parsed_response"
 OPTIONS_ADJUST: List[str] = ["OPTIONS_ADJUST"]
 
 
-class InterviewType(Enum):
-    QUESTION: str = "interview_type_question"
-    CONTEXT: str = "interview_type_context"
-    ONE_PROMPT: str = "interview_type_one_prompt"
+class QuestionnaireType(Enum):
+    SINGLE_ITEM: str = "questionnaire_type_single_item"
+    SEQUENTIAL: str = "questionnaire_type_sequential"
+    BATTERY: str = "questionnaire_type_battery"
 
 
 DEFAULT_SYSTEM_PROMPT: Final[str] = (
@@ -39,4 +39,4 @@ DEFAULT_SYSTEM_PROMPT: Final[str] = (
 DEFAULT_TASK_INSTRUCTION: Final[str] = ""
 DEFAULT_JSON_STRUCTURE: Final[List[str]] = ["reasoning", "answer"]
 DEFAULT_CONSTRAINTS: Final[Dict[str, List[str]]] = {"answer": OPTIONS_ADJUST}
-DEFAULT_INTERVIEW_ID: Final[str] = "Interview"
+DEFAULT_QUESTIONNAIRE_ID: Final[str] = "Questionnaire"
