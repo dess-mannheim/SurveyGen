@@ -13,10 +13,10 @@ import logging
 
 from contextlib import redirect_stderr, redirect_stdout
 
-from surveygen.parser.llm_answer_parser import raw_responses
-from surveygen.utilities.constants import InterviewType
-from surveygen.utilities.utils import create_one_dataframe
-from surveygen.survey_manager import (
+from qstn.parser.llm_answer_parser import raw_responses
+from qstn.utilities.constants import InterviewType
+from qstn.utilities.utils import create_one_dataframe
+from qstn.survey_manager import (
     conduct_survey_sequential,
     conduct_survey_battery,
     conduct_survey_single_item,

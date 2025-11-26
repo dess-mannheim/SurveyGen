@@ -3,9 +3,9 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "survey_gen"
+name = "qstn"
 version = "0.1.0"
-description = "Survey generation tool"
+description = "Questionnaire and Survey Evaluation Toolkit for NLP Research"
 authors = [
     { name = "Maximilian Kreutner", email = "maximilian.kreutner@uni-mannheim.de" }
 ]
@@ -17,11 +17,13 @@ dependencies = [
     "pydantic>=2.11.4",
     "torch>=2.6.0",
     "transformers>=4.51.3",
-    "vllm>=0.9.0",
     "json_repair"
 ]
 
 [project.optional-dependencies]
+vllm = [
+    "vllm>=0.9.0"
+]
 flash = [
     "flashinfer-python>=0.2.5"
 ]

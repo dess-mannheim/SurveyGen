@@ -2,7 +2,7 @@ import warnings
 from abc import ABC
 from typing import List, Dict, Optional, Self
 
-import surveygen.utilities.placeholder
+import qstn.utilities.placeholder
 
 from ..utilities import prompt_templates, constants, prompt_creation, utils
 
@@ -88,7 +88,7 @@ class JSONResponseGenerationMethod(ResponseGenerationMethod):
 
     def get_automatic_prompt(self: Self, questions: List["InterviewItem"] = []):
         formatter = {
-            surveygen.utilities.placeholder.JSON_TEMPLATE: self.get_json_prompt(
+            qstn.utilities.placeholder.JSON_TEMPLATE: self.get_json_prompt(
                 questions=questions
             )
         }

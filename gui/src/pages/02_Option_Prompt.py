@@ -1,7 +1,7 @@
 import streamlit as st
-from surveygen.survey_manager import SurveyOptionGenerator
-from surveygen.llm_interview import LLMInterview
-from surveygen.utilities.prompt_templates import (
+from qstn.survey_manager import SurveyOptionGenerator
+from qstn.llm_interview import LLMInterview
+from qstn.utilities.prompt_templates import (
     LIST_OPTIONS_DEFAULT,
     SCALE_OPTIONS_DEFAULT,
 )

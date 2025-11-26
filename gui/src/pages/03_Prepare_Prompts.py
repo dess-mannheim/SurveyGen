@@ -1,7 +1,7 @@
 import streamlit as st
-from surveygen.survey_manager import SurveyOptionGenerator
-from surveygen.llm_interview import LLMInterview
-from surveygen.utilities.constants import InterviewType
+from qstn.survey_manager import SurveyOptionGenerator
+from qstn.llm_interview import LLMInterview
+from qstn.utilities.constants import InterviewType
 from typing import Any
 
 from gui_elements.paginator import paginator

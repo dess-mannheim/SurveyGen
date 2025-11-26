@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 from io import StringIO
 
-from surveygen.survey_manager import SurveyCreator
+from qstn.survey_manager import SurveyCreator
 
-from surveygen.llm_interview import LLMInterview
+from qstn.llm_interview import LLMInterview
 
 st.set_page_config(layout="wide")
 st.title("SurveyGen")

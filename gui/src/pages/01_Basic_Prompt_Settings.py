@@ -1,7 +1,7 @@
 import streamlit as st
-from surveygen.llm_interview import LLMInterview
-from surveygen.survey_manager import conduct_survey_single_item, conduct_survey_sequential, conduct_survey_battery, SurveyOptionGenerator, SurveyCreator
-from surveygen.utilities.constants import InterviewType
+from qstn.llm_interview import LLMInterview
+from qstn.survey_manager import conduct_survey_single_item, conduct_survey_sequential, conduct_survey_battery, SurveyOptionGenerator, SurveyCreator
+from qstn.utilities.constants import InterviewType
 from gui_elements.paginator import paginator
 from gui_elements.stateful_widget import StatefulWidgets
 import time
