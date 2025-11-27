@@ -1,8 +1,8 @@
 import streamlit as st
-from surveygen.survey_manager import SurveyOptionGenerator
-from surveygen.llm_interview import LLMInterview
-from surveygen.utilities.constants import InterviewType
-from surveygen.utilities import placeholder
+from qstn.survey_manager import SurveyOptionGenerator
+from qstn.llm_questionnaire import LLMQuestionnaire
+from qstn.utilities.constants import QuestionnaireType
+from qstn.utilities import placeholder
 from typing import Any
 
 from gui_elements.paginator import paginator
@@ -33,7 +33,7 @@ def create_stateful_widget() -> StatefulWidgets:
 
 state = create_stateful_widget()
 
-if "interviews" not in st.session_state:
+if "questionnaires" not in st.session_state:
     st.error("You need to first upload a questionnaire and the population you want to survey.")
     st.stop()
     disabled = True
@@ -43,14 +43,14 @@ else:
 if 'current_index' not in st.session_state:
     st.session_state.current_index = 0
 
-#current_interview_id = paginator(st.session_state.interviews, "current_interview_index_prepare")
-current_interview_id = paginator(st.session_state.interviews, "current_interview_index_prompt")
+#current_questionnaire_id = paginator(st.session_state.questionnaires, "current_questionnaire_index_prepare")
+current_questionnaire_id = paginator(st.session_state.questionnaires, "current_questionnaire_index_prompt")
 
-if not "temporary_interview" in st.session_state:
-    st.session_state.temporary_interview = st.session_state.interviews[0].duplicate()
+if not "temporary_questionnaire" in st.session_state:
+    st.session_state.temporary_questionnaire = st.session_state.questionnaires[0].duplicate()
 
-if not "base_interview" in st.session_state:
-    st.session_state.base_interview = st.session_state.temporary_interview.duplicate()
+if not "base_questionnaire" in st.session_state:
+    st.session_state.base_questionnaire = st.session_state.temporary_questionnaire.duplicate()
 
 def process_inputs(input: Any, field_id: str) -> str:
     if "survey_options" in st.session_state:
@@ -59,26 +59,26 @@ def process_inputs(input: Any, field_id: str) -> str:
         survey_options = None
 
     if field_id == question_stem_field:
-        LLMInterview.prepare_interview
-        st.session_state.temporary_interview.prepare_interview(
+        LLMQuestionnaire.prepare_questionnaire
+        st.session_state.temporary_questionnaire.prepare_questionnaire(
             question_stem=input,
             answer_options=survey_options,
             randomized_item_order=randomize_order_bool,
         )
-        st.session_state.base_interview.prepare_interview(
+        st.session_state.base_questionnaire.prepare_questionnaire(
             question_stem=input,
             answer_options=survey_options,
             randomized_item_order=randomize_order_bool,
         )
     elif field_id == randomize_order_tick:
         if input == True:
-            st.session_state.temporary_interview.prepare_interview(
+            st.session_state.temporary_questionnaire.prepare_questionnaire(
                 question_stem=question_stem_input,
                 answer_options=survey_options,
                 randomized_item_order=input,
             )
         else:
-            st.session_state.temporary_interview = st.session_state.base_interview.duplicate()
+            st.session_state.temporary_questionnaire = st.session_state.base_questionnaire.duplicate()
 
 def handle_change(field_id: str):
     """
@@ -93,13 +93,13 @@ def handle_change(field_id: str):
         process_inputs(st.session_state[input_key], field_id)
 
 
-if "interviews" in st.session_state and st.session_state.interviews is not None:
+if "questionnaires" in st.session_state and st.session_state.questionnaires is not None:
     try:
-        interview = st.session_state.interviews[current_interview_id].duplicate()
+        questionnaire = st.session_state.questionnaires[current_questionnaire_id].duplicate()
     except IndexError:
         st.error("Index is out of range. Resetting to the first item.")
-        current_interview_id = 0
-        interview = st.session_state.interviews[current_interview_id].duplicate()
+        current_questionnaire_id = 0
+        questionnaire = st.session_state.questionnaires[current_questionnaire_id].duplicate()
 
     col1, col2 = st.columns(2, gap="large")
 
@@ -110,7 +110,7 @@ if "interviews" in st.session_state and st.session_state.interviews is not None:
             input_key = f"input_{field_id}"
             if not input_key in st.session_state:
                 if field_id == question_stem_field:
-                    st.session_state[input_key] = st.session_state.temporary_interview ._questions[0].question_stem
+                    st.session_state[input_key] = st.session_state.temporary_questionnaire ._questions[0].question_stem
                 if field_id == randomize_order_tick:
                     st.session_state[input_key] = False
 
@@ -181,8 +181,8 @@ if "interviews" in st.session_state and st.session_state.interviews is not None:
         # System prompt and main prompt section (from Basic Prompt Settings)
         new_system_prompt = st.text_area(
             label=system_prompt_field,
-            key=f"{system_prompt_field}{current_interview_id}",
-            value=interview.system_prompt,
+            key=f"{system_prompt_field}{current_questionnaire_id}",
+            value=questionnaire.system_prompt,
             help="The system prompt the model is prompted with."
         )
 
@@ -195,9 +195,9 @@ if "interviews" in st.session_state and st.session_state.interviews is not None:
         )
 
         # Handle placeholder replacement for main prompt before widget is created
-        prompt_key = f"{prompt_field}{current_interview_id}"
+        prompt_key = f"{prompt_field}{current_questionnaire_id}"
         if "main_prompt_placeholder_to_replace" in st.session_state and st.session_state.main_prompt_placeholder_to_replace:
-            current_prompt_text = st.session_state.get(prompt_key, interview.prompt)
+            current_prompt_text = st.session_state.get(prompt_key, questionnaire.prompt)
             placeholder_shortcut = st.session_state.main_prompt_placeholder_to_replace["shortcut"]
             placeholder_value = st.session_state.main_prompt_placeholder_to_replace["value"]
             
@@ -212,7 +212,7 @@ if "interviews" in st.session_state and st.session_state.interviews is not None:
         new_prompt = st.text_area(
             label=prompt_field,
             key=prompt_key,
-            value=interview.prompt,
+            value=questionnaire.prompt,
             help="Instructions that are given to the model before the questions."
         )
 
@@ -238,11 +238,11 @@ if "interviews" in st.session_state and st.session_state.interviews is not None:
                 }
                 st.rerun()
 
-        change_all_interview = state.create(
+        change_all_questionnaire = state.create(
             st.checkbox,
             key=change_all_prompts_checkbox,
-            label="On update: change all interview instructions",
-            help="If this is ticked, all interview instructions will be changed to this.",
+            label="On update: change all questionnaire instructions",
+            help="If this is ticked, all questionnaire instructions will be changed to this.",
             initial_value=False
         )
 
@@ -253,31 +253,31 @@ if "interviews" in st.session_state and st.session_state.interviews is not None:
     # --- The Dynamic Preview Logic ---
     # This block re-runs on every widget interaction.
         with st.container(border=True):
-            # Update temporary interview with question stem
+            # Update temporary questionnaire with question stem
             if "survey_options" in st.session_state:
                 survey_options = st.session_state.survey_options
             else:
                 survey_options = None
 
             if randomize_order_bool:
-                st.session_state.temporary_interview.prepare_interview(
+                st.session_state.temporary_questionnaire.prepare_questionnaire(
                     question_stem=question_stem_input,
                     answer_options=survey_options,
                     randomized_item_order=randomize_order_bool,
                 )
-            st.session_state.base_interview.prepare_interview(
+            st.session_state.base_questionnaire.prepare_questionnaire(
                 question_stem=question_stem_input,
                 answer_options=survey_options,
                 randomized_item_order=False,
             )
 
             if not randomize_order_bool:
-                st.session_state.temporary_interview = st.session_state.base_interview.duplicate()
+                st.session_state.temporary_questionnaire = st.session_state.base_questionnaire.duplicate()
 
-            # Update system prompt and main prompt for preview (apply to temporary_interview)
-            st.session_state.temporary_interview.system_prompt = new_system_prompt
-            st.session_state.temporary_interview.prompt = new_prompt
-            current_system_prompt, current_prompt = st.session_state.temporary_interview.get_prompt_for_interview_type(InterviewType.CONTEXT)
+            # Update system prompt and main prompt for preview (apply to temporary_questionnaire)
+            st.session_state.temporary_questionnaire.system_prompt = new_system_prompt
+            st.session_state.temporary_questionnaire.prompt = new_prompt
+            current_system_prompt, current_prompt = st.session_state.temporary_questionnaire.get_prompt_for_questionnaire_type(QuestionnaireType.SEQUENTIAL)
             current_system_prompt = current_system_prompt.replace("\n", "  \n")
             current_prompt = current_prompt.replace("\n", "  \n")
             st.write(current_system_prompt)
@@ -287,21 +287,21 @@ if "interviews" in st.session_state and st.session_state.interviews is not None:
 
     if st.button("Update Prompt(s)", type="secondary", use_container_width=True):
         if change_all_system:
-            for interview in st.session_state.interviews:
-                interview.system_prompt = new_system_prompt
+            for questionnaire in st.session_state.questionnaires:
+                questionnaire.system_prompt = new_system_prompt
         else:
-            st.session_state.interviews[current_interview_id].system_prompt = new_system_prompt
+            st.session_state.questionnaires[current_questionnaire_id].system_prompt = new_system_prompt
 
-        if change_all_interview:
-            for interview in st.session_state.interviews:
-                interview.prompt = new_prompt
+        if change_all_questionnaire:
+            for questionnaire in st.session_state.questionnaires:
+                questionnaire.prompt = new_prompt
         else:
-            st.session_state.interviews[current_interview_id].prompt = new_prompt             
+            st.session_state.questionnaires[current_questionnaire_id].prompt = new_prompt             
         st.success("Prompt(s) updated!")
 
-    if st.button("Confirm and Prepare Interview", type="primary", use_container_width=True):
-        for interview in st.session_state.interviews:
-            interview.prepare_interview(
+    if st.button("Confirm and Prepare Questionnaire", type="primary", use_container_width=True):
+        for questionnaire in st.session_state.questionnaires:
+            questionnaire.prepare_questionnaire(
                 question_stem=question_stem_input,
                 answer_options=survey_options,
                 randomized_item_order=randomize_order_bool,
