@@ -6,7 +6,7 @@ from ..inference.response_generation import (
     JSONResponseGenerationMethod,
     ChoiceResponseGenerationMethod,
     LogprobResponseGenerationMethod,
-    JSONAllOptionsResponseGenerationMethod,
+    JSONVerbalizedDistribution,
 )
 
 import pandas as pd
@@ -162,7 +162,7 @@ class AnswerOptions:
 
         if self.response_generation_method:
             if isinstance(
-                self.response_generation_method, JSONAllOptionsResponseGenerationMethod
+                self.response_generation_method, JSONVerbalizedDistribution
             ):
                 if self.response_generation_method.output_index_only:
                     self.response_generation_method.json_fields = {

@@ -250,7 +250,7 @@ class JSONReasoningResponseGenerationMethod(JSONResponseGenerationMethod):
         )
 
 
-class JSONAllOptionsResponseGenerationMethod(JSONResponseGenerationMethod):
+class JSONVerbalizedDistribution(JSONResponseGenerationMethod):
     def __init__(
         self,
         output_template=prompt_templates.SYSTEM_JSON_ALL_OPTIONS,
