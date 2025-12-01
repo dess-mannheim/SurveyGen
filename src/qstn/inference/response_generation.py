@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class ResponseGenerationMethod(ABC):
     """Abstract base class for constraining the model output, e.g., for closed-ended survey questions."""
 
-    def get_automatic_prompt(self: Self, questions: List[QuestionnaireItem] = []):
+    def get_automatic_prompt(self: Self, questions: List["QuestionnaireItem"] = []):
         pass
 
     # NOTE that validation is not required anymore, since we rely on inheritance instead
@@ -54,7 +54,7 @@ class JSONResponseGenerationMethod(ResponseGenerationMethod):
         self.output_template = output_template
         self.output_index_only = output_index_only
 
-    def get_json_prompt(self: Self, questions: List[QuestionnaireItem] = []):
+    def get_json_prompt(self: Self, questions: List["QuestionnaireItem"] = []):
         num_questions = len(questions)
         if isinstance(self.json_fields, dict):
             json_attributes = list(self.json_fields.keys())
@@ -83,7 +83,7 @@ class JSONResponseGenerationMethod(ResponseGenerationMethod):
 
         return creator.get_output_prompt()
 
-    def get_automatic_prompt(self: Self, questions: List[QuestionnaireItem] = []):
+    def get_automatic_prompt(self: Self, questions: List["QuestionnaireItem"] = []):
         formatter = {
             qstn.utilities.placeholder.JSON_TEMPLATE: self.get_json_prompt(
                 questions=questions
@@ -92,7 +92,7 @@ class JSONResponseGenerationMethod(ResponseGenerationMethod):
         return utils.safe_format_with_regex(self.output_template, formatter)
 
     def create_new_rgm_with_multiple_questions(
-        self: Self, questions: List[QuestionnaireItem] = []
+        self: Self, questions: List["QuestionnaireItem"] = []
     ) -> Self:
         num_questions = len(questions)
         if num_questions <= 1:
