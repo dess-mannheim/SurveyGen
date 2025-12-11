@@ -8,6 +8,8 @@ from .utilities import constants, placeholder, prompt_templates
 from .utilities.constants import QuestionnairePresentation
 from .utilities.utils import safe_format_with_regex
 
+from .utilities.prompt_perturbations import * 
+
 from .inference.response_generation import ResponseGenerationMethod
 
 import pandas as pd
@@ -49,6 +51,7 @@ class LLMPrompt:
         prompt: str = DEFAULT_PROMPT_STRUCTURE,
         verbose=False,
         seed: int = 42,
+        enable_perturbations: Union[str, List[str]] =  [],
     ):
         """
         Initialize an LLMPrompt instance. Either a path to a csv file or a pandas dataframe has to be provided to structure the questionnaire.
@@ -60,7 +63,10 @@ class LLMPrompt:
             prompt (str): Prompt for all questions.
             verbose (bool): If True, enables verbose output.
             seed (int): Random seed for reproducibility.
-        """
+            enable_perturbations (bool/str/List[str]): If a string or list of strings is provided, only those perturbations are enabled. 
+                Valid perturbation names are: "key_typos", "keyboard_typos", "letter_swaps", "synonyms", "paraphrase".
+
+          """
         random.seed(seed)
 
         if questionnaire_source is None:
@@ -76,6 +82,8 @@ class LLMPrompt:
         self.prompt: str = prompt
 
         self._same_options = False
+
+        self.enable_perturbations = enable_perturbations
 
     def duplicate(self):
         """
@@ -290,7 +298,6 @@ class LLMPrompt:
             prefilled_responses (Dict[int, str], optional): If you provide prefilled responses, they will be used
             to fill the answers instead of prompting the LLM for that question.
             randomized_item_order (bool): If True, randomize the order of questions.
-
         Returns:
             Self: The updated instance with prepared questions.
         """
@@ -381,7 +388,7 @@ class LLMPrompt:
                     ),
                 )
                 updated_questions.append(new_questionnaire_question)
-
+        
         if randomized_item_order:
             random.shuffle(updated_questions)
 
@@ -398,6 +405,15 @@ class LLMPrompt:
         Returns:
             str: The formatted prompt for the question.
         """
+        # Logic to normalize the input into a list of active perturbations
+        self.perturbations: List[str] = []
+
+        if isinstance(self.enable_perturbations, str):
+            self.perturbations = [self.enable_perturbations]
+        elif isinstance(self.enable_perturbations, list):
+            self.perturbations = self.enable_perturbations
+        else:
+            self.perturbations = []
 
         if questionnaire_items.question_stem:
             if placeholder.QUESTION_CONTENT in questionnaire_items.question_stem:
@@ -411,6 +427,25 @@ class LLMPrompt:
                 question_prompt = f"""{questionnaire_items.question_stem} {questionnaire_items.question_content}"""
         else:
             question_prompt = f"""{questionnaire_items.question_content}"""
+        
+        if self.perturbations: 
+                    perturbation_map = {
+                        "key_typos": key_typos,
+                        "keyboard_typos": keyboard_typos,
+                        "letter_swaps": letter_swaps,
+                        #"synonyms": make_synonyms,  #TODO
+                        #"paraphrase": make_paraphrase #TODO
+                    }
+
+                    for p_name in self.perturbations:
+                        if p_name in perturbation_map:
+                            # Pass the current string and the specific function to the helper
+                            question_prompt = apply_safe_perturbation(
+                                question_prompt, 
+                                perturbation_map[p_name]
+                            )
+
+        
         if questionnaire_items.answer_options:
             _options_str = questionnaire_items.answer_options.create_options_str()
             if _options_str is not None:
@@ -418,6 +453,7 @@ class LLMPrompt:
                 question_prompt = safe_format_with_regex(
                     question_prompt, safe_formatter
                 )
+        
         return question_prompt
     
 
@@ -430,6 +466,10 @@ def generate_likert_options(
     random_order: bool = False,
     reversed_order: bool = False,
     even_order: bool = False,
+    add_middle_category: bool = False,
+    str_middle_cat: str = "Neutral",
+    add_refusal: bool = False,
+    refusal_code: str = "-99",
     start_idx: int = 1,
     list_prompt_template: str = prompt_templates.LIST_OPTIONS_DEFAULT,
     scale_prompt_template: str = prompt_templates.SCALE_OPTIONS_DEFAULT,
@@ -455,6 +495,14 @@ def generate_likert_options(
             Defaults to False.
         even_order (bool, optional): If True, options the center option will be removed.
             E.g., for n=5: 1, 2, 4, 5
+        add_middle_category (bool, optional): If True, a middle category will be added. The name can be specified,
+            by default it is "Neutral". E.g., for n=4: 1, 2, 3: Neutral, 4, 5
+        str_middle_cat (str, optional): The label for the middle category if `add_middle_category` is True.
+            Defaults to "Neutral".
+        add_refusal (bool, optional): If True, an additional option for "Don't know / Refuse to answer" will be added.
+            Defaults to False.
+        refusal_code (str, optional): The code assigned to the refusal option if `add_refusal` is True.
+            Defaults to "-99".
         start_idx (int, optional): The starting index for the scale (usually 0 or 1).
             Defaults to 1.
         list_prompt_template (str, optional): The template for prompts that list all options.
@@ -501,7 +549,7 @@ def generate_likert_options(
                     f"answer_texts and n need to be the same length, but answer_texts has length {len(answer_texts)} and n was given as {n}."
                 )
     if even_order:
-        if n % 2 != 0:
+        if n % 2 == 0:
             raise ValueError(
                 "If you want to turn a scale even, it should be odd before."
             )
@@ -510,6 +558,15 @@ def generate_likert_options(
             answer_texts[:middle_index] + answer_texts[middle_index + 1 :]
         )
         n = n - 1
+    if add_middle_category:
+        if n % 2 != 0:
+            raise ValueError(
+                "If you want to add a middle category, it should be even before."
+            )
+        middle_index = n // 2
+        answer_texts = answer_texts[:middle_index] + [str_middle_cat] + answer_texts[middle_index :]
+        n = n + 1
+
     if random_order:
         if len(answer_texts) < 2:
             raise ValueError(
@@ -523,16 +580,26 @@ def generate_likert_options(
             raise ValueError(
                 "There must be at least two answer options to reorder in reverse."
             )
-        answer_options = answer_options[::-1]
+        answer_texts = answer_texts[::-1]
+    
+    if add_refusal:
+        answer_texts.append("Don't know / Refuse to answer")
+        n += 1
 
     answer_option_indices = []
     if idx_type == "no_index":
         # no index, just the answer options directly
         answer_option_indices = None
     elif idx_type == "integer":
-        for i in range(n):
-            answer_code = i + start_idx
-            answer_option_indices.append(str(answer_code))
+        if add_refusal: # if refusal is added, assign it a common code -99
+            for i in range(n - 1):
+                answer_code = i + start_idx
+                answer_option_indices.append(str(answer_code))
+            answer_option_indices.append(refusal_code)  # common code for refusal
+        else:
+            for i in range(n):
+                answer_code = i + start_idx
+                answer_option_indices.append(str(answer_code))
     else:
         # TODO @Jens add these to constants.py
         if idx_type == "char_lower":
@@ -542,6 +609,8 @@ def generate_likert_options(
             for i in range(n):
                 answer_option_indices.append(ascii_uppercase[(i + start_idx) % 26])
 
+
+    
     answer_texts_object = AnswerTexts(
         answer_texts=answer_texts,
         indices=answer_option_indices,
