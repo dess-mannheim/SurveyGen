@@ -31,8 +31,11 @@ for key, value in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
+@st.cache_data
+def create_stateful_widget() -> StatefulWidgets:
+    return StatefulWidgets()
 
-state = StatefulWidgets()
+state = create_stateful_widget()
 
 # ==============================================================================
 # COLUMN 1: OPENAI CLIENT CONFIGURATION
