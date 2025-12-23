@@ -15,8 +15,7 @@ try:
     from vllm.outputs import RequestOutput
     has_vllm = True
 except ImportError:
-    pass
-    # LLM = None
+    LLM = Any
 
 try:
     from openai import AsyncOpenAI
@@ -24,8 +23,7 @@ try:
 
     has_openai = True
 except ImportError:
-    pass
-    # AsyncOpenAI = None
+    AsyncOpenAI = Any
 
 from .dynamic_pydantic import _generate_pydantic_model
 from .response_generation import (
@@ -35,7 +33,7 @@ from .response_generation import (
     LogprobResponseGenerationMethod,
 )
 
-import regex as re
+import re
 
 from tqdm.auto import tqdm
 

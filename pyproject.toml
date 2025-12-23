@@ -16,7 +16,8 @@ dependencies = [
     "pandas>=2.2.3",
     "pydantic>=2.11.4",
     "openai",
-    "json_repair"
+    "json_repair",
+    "fsspec"
 ]
 
 classifiers = [

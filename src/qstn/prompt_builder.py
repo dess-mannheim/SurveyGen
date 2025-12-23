@@ -19,7 +19,7 @@ import random
 import copy
 
 
-from transformers import AutoTokenizer
+#from transformers import AutoTokenizer
 
 
 class LLMPrompt:
@@ -172,34 +172,34 @@ class LLMPrompt:
 
         return system_prompt, prompt
 
-    def calculate_input_token_estimate(
-        self, model_id: str, questionnaire_type: QuestionnairePresentation = QuestionnairePresentation.SINGLE_ITEM
-    ) -> int:
-        """
-        Estimate the number of input tokens for the prompt, given a model and questionnaire type.
-        Remember that the model also has to have enough context length to fit its own response
-        in case of CONTEXT and ONE_PROMPT type.
+    # def calculate_input_token_estimate(
+    #     self, model_id: str, questionnaire_type: QuestionnairePresentation = QuestionnairePresentation.SINGLE_ITEM
+    # ) -> int:
+    #     """
+    #     Estimate the number of input tokens for the prompt, given a model and questionnaire type.
+    #     Remember that the model also has to have enough context length to fit its own response
+    #     in case of CONTEXT and ONE_PROMPT type.
 
-        Args:
-            model_id (str): Huggingface model id.
-            questionnaire_type (QuestionnairePresentation): Type of questionnaire prompt.
+    #     Args:
+    #         model_id (str): Huggingface model id.
+    #         questionnaire_type (QuestionnairePresentation): Type of questionnaire prompt.
 
-        Returns:
-            int: Estimated number of input tokens.
-        """
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        system_prompt, prompt = self.get_prompt_for_questionnaire_type(
-            questionnaire_type=questionnaire_type
-        )
-        system_tokens = tokenizer.encode(system_prompt)
-        tokens = tokenizer.encode(prompt)
-        total_tokens = len(system_tokens) + len(tokens)
+    #     Returns:
+    #         int: Estimated number of input tokens.
+    #     """
+    #     tokenizer = AutoTokenizer.from_pretrained(model_id)
+    #     system_prompt, prompt = self.get_prompt_for_questionnaire_type(
+    #         questionnaire_type=questionnaire_type
+    #     )
+    #     system_tokens = tokenizer.encode(system_prompt)
+    #     tokens = tokenizer.encode(prompt)
+    #     total_tokens = len(system_tokens) + len(tokens)
 
-        return (
-            total_tokens
-            if questionnaire_type != QuestionnairePresentation.SEQUENTIAL
-            else len(total_tokens) * 3
-        )
+    #     return (
+    #         total_tokens
+    #         if questionnaire_type != QuestionnairePresentation.SEQUENTIAL
+    #         else len(total_tokens) * 3
+    #     )
 
     def get_questions(self) -> List[QuestionnaireItem]:
         """

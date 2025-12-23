@@ -74,7 +74,7 @@ from .prompt_builder import LLMPrompt, QuestionnairePresentation
 
 from .utilities.survey_objects import InferenceResult
 
-from vllm import LLM
+#from vllm import LLM
 
 from openai import AsyncOpenAI
 
@@ -88,7 +88,7 @@ from tqdm.auto import tqdm
 
 
 def conduct_survey_single_item(
-    model: Union[LLM, AsyncOpenAI],
+    model: Union["LLM", AsyncOpenAI],
     llm_prompts: Union[LLMPrompt, List[LLMPrompt]],
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
@@ -274,7 +274,7 @@ def _intermediate_save_path_check(n_save_step: int, intermediate_save_path: str)
 
 
 def conduct_survey_battery(
-    model: Union[LLM, AsyncOpenAI],
+    model: Union["LLM", AsyncOpenAI],
     llm_prompts: Union[LLMPrompt, List[LLMPrompt]],
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
@@ -394,7 +394,7 @@ def conduct_survey_battery(
 
 
 def conduct_survey_sequential(
-    model: Union[LLM, AsyncOpenAI],
+    model: Union["LLM", AsyncOpenAI],
     llm_prompts: Union[LLMPrompt, List[LLMPrompt]],
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
