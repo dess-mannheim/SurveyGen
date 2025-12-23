@@ -1,18 +1,31 @@
-from vllm import LLM, SamplingParams
-from vllm.sampling_params import StructuredOutputsParams
-from vllm.outputs import RequestOutput
+from typing import TYPE_CHECKING, Any, List, Optional, Union, Dict, Tuple
 
-import torch
+import random
 
-import numpy as np
+if TYPE_CHECKING:
+    from vllm import LLM
+    from openai import AsyncOpenAI
 
-import asyncio
-import threading
+has_vllm = False
+has_openai = False
 
-from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletion
+try:
+    from vllm import LLM
+    from .local_inference import run_vllm_batch, run_vllm_batch_conversation
+    from vllm.outputs import RequestOutput
+    has_vllm = True
+except ImportError:
+    pass
+    # LLM = None
 
-from typing import Any, List, Optional, Union, Dict
+try:
+    from openai import AsyncOpenAI
+    from .remote_inference import run_openai_batch, run_openai_batch_conversation
+
+    has_openai = True
+except ImportError:
+    pass
+    # AsyncOpenAI = None
 
 from .dynamic_pydantic import _generate_pydantic_model
 from .response_generation import (
@@ -22,87 +35,75 @@ from .response_generation import (
     LogprobResponseGenerationMethod,
 )
 
-import json
-import random
-
-from tqdm.asyncio import tqdm_asyncio
-
-# @dataclass
-# class StructuredOutputOptions:
-#     """
-#     Configuration for structured output generation.
-
-#     Attributes:
-#         category: Type of structured output ("choice" or "json")
-#         json_fields: List of field names for JSON output
-#         constraints: Optional constraints for field values
-#         allowed_choices: List of allowed choices for choice output
-#         automatic_system_prompt: If a instruction to only output in the required json format should be added to the system prompt
-#     """
-
-#     category: Literal["choice", "json"]
-#     json_fields: Optional[List[str]] = None
-#     constraints: Optional[Dict[str, List[str]]] = None
-#     allowed_choices: Optional[List[str]] = None
-#     automatic_system_prompt: bool = False
-
-#     def __post_init__(self):
-#         """Perform validation after the object has been initialized."""
-#         if self.category == "json" and self.json_fields is None:
-#             raise ValueError(
-#                 "`json_fields` must be provided when category is 'json'"
-#             )
-
-#         if self.category == "choice" and self.allowed_choices is None:
-#             raise ValueError(
-#                 "`allowed_choices` must be provided when category is 'choice'"
-#             )
-
-
 import regex as re
 
 from tqdm.auto import tqdm
 
+def _print_conversation(
+    system_messages: List[str],
+    prompts: List[str],
+    assistant_messages: List[str],
+    plain_results: List[str],
+    reasoning_output: List[str],
+    logprob_result: List[str],
+    response_generation_method: List[ResponseGenerationMethod],
+    number_of_printed_conversations: int = 2,
+):  
+    
+    
+    round_print = f"{conversation_print}\nSystem Prompt:\n{system_message}"
+    for j in range(len(prompt_list)):
+        round_print = f"{round_print}\nUser Message:\n{prompt_list[j]}"
+        if j < len(assistant_list):
+            prefill = assistant_list[j]
+            if prefill:
+                round_print = (
+                    f"{round_print}\nAssistant Message:\n{assistant_list[j]}"
+                )
+    round_print = f"{round_print}\nGenerated Answer:\n{answer}"
+    
+    if assistant_messages:
+        conversation_print = "--- Conversation ---"
+        for i, (system_message, prompt_list, answer, reasoning, logprob_answer, assistant_list) in enumerate(
+            zip(system_messages, prompts, plain_results, reasoning_output, logprob_result, assistant_messages)
+        ):
+            if i >= number_of_printed_conversations:
+                break
 
-def default_model_init(model_id: str, seed: int = 42, **model_keywords) -> LLM:
-    """
-    Initialize a vLLM model with default settings.
+            round_print = f"{conversation_print}\n-- System Message --\n{system_message}"
+            for j in range(len(prompt_list)):
+                round_print = f"{round_print}\n-- User Message --\n{prompt_list[j]}"
+                if j < len(assistant_list):
+                    prefill = assistant_list[j]
+                    if prefill:
+                        round_print = (
+                            f"{round_print}\n-- Assistant Message --\n{assistant_list[j]}"
+                        )
+            round_print = f"{round_print}\n-- Generated Answer --\n{answer}"
+            if reasoning:
+                round_print += "\n-- Reasoning --\n" + str(reasoning)
 
-    Args:
-        model_id: HuggingFace model identifier
-        seed: Random seed for reproducibility
-        **model_keywords: Additional keywords passed to LLM constructor
+            if i < len(response_generation_method):
+                current_method = response_generation_method[i]
+                if isinstance(current_method, LogprobResponseGenerationMethod):
+                    round_print += "\n-- Logprobs --\n" + str(logprob_answer)
+            tqdm.write(round_print)
+    else:
+        conversation_print = "--- Conversation ---"
+        for i, (system_message, prompt, answer, reasoning, logprob_answer) in enumerate(
+            zip(system_messages, prompts, plain_results, reasoning_output, logprob_result)
+        ):
+            if i >= number_of_printed_conversations:
+                break
+            round_print = f"{conversation_print}\n-- System Message --\n{system_message}\n-- User Message ---\n{prompt}\n-- Generated Message --\n{answer}"
+            if reasoning:
+                round_print += "\n-- Reasoning --\n" + str(reasoning)
 
-    Returns:
-        LLM: Initialized vLLM model instance
-    """
-    random.seed(seed)
-    torch.manual_seed(seed)
-    print("Device_count: " + str(torch.cuda.device_count()))
-    print(model_keywords)
-
-    return LLM(
-        model=model_id,
-        tensor_parallel_size=torch.cuda.device_count(),
-        seed=seed,
-        **model_keywords,
-    )
-
-
-def _generate_seeds(seed: int, batch_size: int) -> List[int]:
-    """
-    Generate a list of random seeds.
-
-    Args:
-        seed: Base random seed
-        batch_size: Number of seeds to generate
-
-    Returns:
-        List[int]: Generated random seeds
-    """
-    rng = np.random.default_rng(seed)
-    return rng.integers(low=0, high=2**32, size=batch_size).tolist()
-
+            if i < len(response_generation_method):
+                current_method = response_generation_method[i]
+                if isinstance(current_method, LogprobResponseGenerationMethod):
+                    round_print += "\n-- Logprobs --\n" + str(logprob_answer)
+            tqdm.write(round_print)
 
 # TODO Structured output for API calls
 def batch_generation(
@@ -116,16 +117,13 @@ def batch_generation(
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
     print_conversation: bool = False,
-    number_of_printed_conversation: int = 2,
+    number_of_printed_conversations: int = 2,
     print_progress: bool = True,
-    # <think>...</think> tokens are used by Qwen3 to separate reasoning
     reasoning_start_token: str = "<think>",
     reasoning_end_token: str = "</think>",
     space_char: str = "Ġ",
-    chat_template: Optional[str] = None,
-    chat_template_kwargs: Dict[str, Any] = {},
     **generation_kwargs: Any,
-):
+) -> Tuple:
     """
     Generate responses for a batch of prompts.
 
@@ -151,18 +149,61 @@ def batch_generation(
         **generation_kwargs: Additional generation parameters
 
     Returns:
-        List[str]: Generated responses
+        Tuple[List[str], List[str], List[str]]: Generated Response, Logprobs, Reasoning
     """
+
+    model_type = type(model).__name__
+    if model_type == "LLM" and not has_vllm:
+        raise ImportError(
+            "You are trying to use a vLLM model, but 'vllm' is not installed."
+        )
+    elif model_type == "AsyncOpenAI" and not has_openai:
+        raise ImportError(
+            "You are trying to use OpenAI, but 'openai' is not installed."
+        )
+    elif model_type != "LLM" and model_type != "AsyncOpenAI":
+        raise ValueError(f"Unsupported model type: {type(model)}")
     random.seed(seed)
 
-    # Prepare batch of messages
-    batch_messages: List[List[Dict[str, str]]] = [
-        [
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt},
-        ]
-        for system_message, prompt in zip(system_messages, prompts)
-    ]
+    # Inference
+    if has_vllm and isinstance(model, LLM):
+        plain_results, logprob_result, reasoning_outputs = run_vllm_batch(
+            model,
+            system_messages=system_messages,
+            prompts=prompts,
+            response_generation_method=response_generation_method,
+            seed=seed,
+            print_progress=print_progress,
+            reasoning_start_token=reasoning_start_token,
+            reasoning_end_token=reasoning_end_token,
+            space_char=space_char,
+            **generation_kwargs,
+        )
+    elif has_openai and isinstance(model, AsyncOpenAI):
+        plain_results, logprob_result, reasoning_outputs = run_openai_batch(
+            model,
+            system_messages=system_messages,
+            prompts=prompts,
+            response_generation_method=response_generation_method,
+            seed=seed,
+            print_progress=print_progress,
+            client_model_name=client_model_name,
+            api_concurrency=api_concurrency,
+            **generation_kwargs,
+        )
+
+    if print_conversation:
+        _print_conversation(
+            system_messages=system_messages,
+            prompts=prompts,
+            plain_results=plain_results,
+            reasoning_output=reasoning_outputs,
+            logprob_result=logprob_result,
+            response_generation_method=response_generation_method,
+            number_of_printed_conversations=number_of_printed_conversations,
+        )
+
+    return (plain_results, logprob_result, reasoning_outputs)
 
     batch_size: int = len(system_messages)
 
@@ -191,24 +232,47 @@ def batch_generation(
             chat_template=chat_template,
             chat_template_kwargs=chat_template_kwargs,
         )
-        result = [output.outputs[0].text for output in outputs]
+        # result = [output.outputs[0].text for output in outputs]
 
         # separate out reasoning
         # we parse this here because the OpenAI API separates it automatically
         plain_results = []
         reasoning_output = []
         raw_reasonings = []  # keep the whitespace for length calculations
-        for output_text in result:
-            reasoning_match = re.search(
-                reasoning_start_token + r"(.*?)" + reasoning_end_token,
-                output_text,
-                re.DOTALL,
+
+        print(outputs)
+        for output in outputs:
+            out_obj = output.outputs[0]
+
+            # 1. ATTEMPT NATIVE EXTRACTION (vLLM 2025 Standard)
+            # vLLM now often populates 'reasoning_text' or 'reasoning'
+            native_reasoning = getattr(out_obj, "reasoning_text", None) or getattr(
+                out_obj, "reasoning", None
             )
-            raw_reasonings.append(reasoning_match.group(1) if reasoning_match else None)
+            final_answer = out_obj.text
+            print(out_obj)
+            print(native_reasoning)
+            if not native_reasoning:
+                # We could support more patterns here
+                patterns = [
+                    (reasoning_start_token, reasoning_end_token),
+                ]
+
+                for start, end in patterns:
+                    match = re.search(f"{start}(.*?){end}", final_answer, re.DOTALL)
+                    if match:
+                        native_reasoning = match.group(1)
+                        # clean final answer
+                        final_answer = final_answer.split(end)[-1].strip()
+                        break
+
+            raw_reasonings.append(native_reasoning if native_reasoning else None)
+
             reasoning_output.append(
-                reasoning_match.group(1).strip() if reasoning_match else None
+                native_reasoning.strip() if native_reasoning else None
             )
-            plain_results.append(output_text.split(reasoning_end_token)[-1].strip())
+
+            plain_results.append(final_answer.strip())
 
         if response_generation_method:
             for rgm in response_generation_method:
@@ -296,155 +360,25 @@ def batch_generation(
                 round_print += "\n-- Logprobs --\n" + str(logprob_answer)
             tqdm.write(round_print)
 
-    return (plain_results, logprob_result, reasoning_output)
-
-
-def _make_cache_key(fields: Any, constraints: Any) -> str:
-    return json.dumps({"fields": fields, "constraints": constraints}, sort_keys=False)
-
-
-def _create_sampling_params(
-    batch_size: int,
-    seeds: List[int],
-    response_generation_method: Optional[
-        Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
-    ],
-    use_vllm: bool = True,
-    **generation_kwargs: Any,
-) -> Union[List[SamplingParams], Dict[str, Any]]:
-    """
-    Create sampling parameters for generation.
-
-    Args:
-        batch_size: Number of prompts in batch
-        seeds: Random seeds for generation
-        answer_production_method: Output structure configuration
-        use_vllm: If True, creates vLLM parameters
-        **generation_kwargs: Additional sampling parameters
-
-    Returns:
-        Sampling parameters for vLLM or API configuration
-    """
-
-    if response_generation_method:
-        sampling_params_list = _structured_sampling_params(
-            batch_size=batch_size,
-            seeds=seeds,
-            response_generation_method=response_generation_method,
-            use_vllm=use_vllm,
-            **generation_kwargs,
-        )
-    else:
-        if use_vllm:
-            sampling_params_list = [
-                SamplingParams(seed=seeds[i], **generation_kwargs)
-                for i in range(batch_size)
-            ]
-        else:
-            return []
-    return sampling_params_list
-
-
-def _structured_sampling_params(
-    batch_size: int,
-    seeds: List[int],
-    response_generation_method: Union[
-        ResponseGenerationMethod, List[ResponseGenerationMethod]
-    ],
-    use_vllm: bool = True,
-    **generation_kwargs: Any,
-) -> Union[List[SamplingParams], Dict[str, Any]]:
-
-    structured_output = []
-
-    if isinstance(response_generation_method, ResponseGenerationMethod):
-        if isinstance(response_generation_method, JSONResponseGenerationMethod):
-            pydantic_model = _generate_pydantic_model(
-                fields=response_generation_method.json_fields,
-                constraints=response_generation_method.constraints,
-            )
-            json_schema = pydantic_model.model_json_schema()
-            if use_vllm:
-                global_structured_output = StructuredOutputsParams(json=json_schema)
-                structured_output = [global_structured_output] * batch_size
-            else:
-                structured_output = [json_schema] * batch_size
-        elif (
-            isinstance(
-                response_generation_method,
-                (ChoiceResponseGenerationMethod, LogprobResponseGenerationMethod),
-            )
-            and response_generation_method.allowed_choices is not None
+        # TODO add argument to specify how many conversations should be printed
+    if print_conversation:
+        conversation_print = "Conversation:"
+        for system_message, prompt_list, assistant_list, answer in zip(
+            system_messages, prompts, assistant_messages, result
         ):
-            _allowed_choices = [
-                str(c) for c in response_generation_method.allowed_choices
-            ]
-            if use_vllm:
-                global_structured_output = StructuredOutputsParams(choice=_allowed_choices)
-                structured_output = [global_structured_output] * batch_size
-            else:
-                structured_output = [_allowed_choices] * batch_size
+            round_print = f"{conversation_print}\nSystem Prompt:\n{system_message}"
+            for j in range(len(prompt_list)):
+                round_print = f"{round_print}\nUser Message:\n{prompt_list[j]}"
+                if j < len(assistant_list):
+                    prefill = assistant_list[j]
+                    if prefill:
+                        round_print = (
+                            f"{round_print}\nAssistant Message:\n{assistant_list[j]}"
+                        )
+            round_print = f"{round_print}\nGenerated Answer:\n{answer}"
+            tqdm.write(round_print)
 
-    else:
-        structured_output = []
-        cache: Dict[str, StructuredOutputsParams] = {}
-        for i in range(batch_size):
-            if isinstance(response_generation_method[i], JSONResponseGenerationMethod):
-                fields = response_generation_method[i].json_fields
-                cons = response_generation_method[i].constraints
-
-                key = _make_cache_key(fields, cons)
-
-                if key not in cache:
-                    pydantic_model = _generate_pydantic_model(
-                        fields=fields, constraints=cons
-                    )
-                    json_schema = pydantic_model.model_json_schema()
-                    if use_vllm:
-                        cache[key] = StructuredOutputsParams(json=json_schema)
-                    else:
-                        cache[key] = json_schema
-
-                structured_output.append(cache[key])
-            elif (
-                isinstance(
-                    response_generation_method[i],
-                    (ChoiceResponseGenerationMethod, LogprobResponseGenerationMethod),
-                )
-                and response_generation_method[i].allowed_choices is not None
-            ):
-                _allowed_choices = [
-                    str(c) for c in response_generation_method[i].allowed_choices
-                ]
-
-                key = _make_cache_key(_allowed_choices, None)
-                if key not in cache:
-                    if use_vllm:
-                        cache[key] = StructuredOutputsParams(choice=_allowed_choices)
-                    else:
-                        cache[key] = _allowed_choices
-                structured_output.append(cache[key])
-            else:
-                structured_output.append(None)
-
-    if use_vllm and len(structured_output) == batch_size:
-        sampling_params_list = [
-            SamplingParams(
-                seed=seeds[i],
-                structured_outputs=structured_output[i],
-                **generation_kwargs,
-            )
-            for i in range(batch_size)
-        ]
-    elif use_vllm:
-        sampling_params_list = [
-            SamplingParams(seed=seeds[i], **generation_kwargs)
-            for i in range(batch_size)
-        ]
-    else:
-        return structured_output
-
-    return sampling_params_list
+    return (plain_results, logprob_result, reasoning_output)
 
 
 def batch_turn_by_turn_generation(
@@ -459,12 +393,11 @@ def batch_turn_by_turn_generation(
     client_model_name: Optional[str] = None,
     api_concurrency: int = 10,
     print_conversation: bool = False,
+    number_of_printed_conversations: int = 2,
     print_progress: bool = True,
     reasoning_start_token: str = "<think>",
     reasoning_end_token: str = "</think>",
     space_char: str = "Ġ",
-    chat_template: Optional[str] = None,
-    chat_template_kwargs: Dict[str, Any] = {},
     **generation_kwargs,
 ) -> List[str]:
     """
@@ -491,8 +424,66 @@ def batch_turn_by_turn_generation(
         **generation_kwargs: Additional generation parameters
 
     Returns:
-        List[str]: Generated responses for each conversation
+        Tuple[List[str], List[str], List[str]]: Generated Responses, Logprobs, Reasonings
     """
+    
+    model_type = type(model).__name__
+    if model_type == "LLM" and not has_vllm:
+        raise ImportError(
+            "You are trying to use a vLLM model, but 'vllm' is not installed."
+        )
+    elif model_type == "AsyncOpenAI" and not has_openai:
+        raise ImportError(
+            "You are trying to use OpenAI, but 'openai' is not installed."
+        )
+    elif model_type != "LLM" and model_type != "AsyncOpenAI":
+        raise ValueError(f"Unsupported model type: {type(model)}")
+    random.seed(seed)
+
+    # Inference
+    if has_vllm and isinstance(model, LLM):
+        plain_results, logprob_result, reasoning_outputs = run_vllm_batch_conversation(
+            model,
+            system_messages=system_messages,
+            prompts=prompts,
+            assistant_messages=assistant_messages,
+            response_generation_method=response_generation_method,
+            seed=seed,
+            print_progress=print_progress,
+            reasoning_start_token=reasoning_start_token,
+            reasoning_end_token=reasoning_end_token,
+            space_char=space_char,
+            **generation_kwargs,
+        )
+    elif has_openai and isinstance(model, AsyncOpenAI):
+        plain_results, logprob_result, reasoning_outputs = run_openai_batch_conversation(
+            model,
+            system_messages=system_messages,
+            prompts=prompts,
+            assistant_messages=assistant_messages,
+            response_generation_method=response_generation_method,
+            client_model_name=client_model_name,
+            seed=seed,
+            print_progress=print_progress,
+            api_concurrency=api_concurrency,
+            **generation_kwargs,
+        )
+
+    if print_conversation:
+        _print_conversation(
+            system_messages=system_messages,
+            prompts=prompts,
+            assistant_messages=assistant_messages,
+            plain_results=plain_results,
+            reasoning_output=reasoning_outputs,
+            logprob_result=logprob_result,
+            response_generation_method=response_generation_method,
+            number_of_printed_conversations=number_of_printed_conversations,
+        )
+
+    return (plain_results, logprob_result, reasoning_outputs)
+
+
 
     random.seed(seed)
     batch_messages = []
@@ -628,219 +619,82 @@ def batch_turn_by_turn_generation(
     return (plain_results, logprob_result, reasoning_output)
 
 
-def _run_async_in_thread(
-    client: AsyncOpenAI,
-    client_model_name: str,
-    batch_messages: List[List[Dict[str, str]]],
-    seeds: List[int],
-    concurrency_limit: int = 10,
-    print_progress: bool = True,
-    response_generation_method: Optional[
-        Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
-    ] = None,
-    **generation_kwargs,
-):
-    result_container = {}
+# def batch_decoding(
+#     model: Union[LLM, AsyncOpenAI],
+#     prompts: List[str] = ["Hi there! What is your name?"],
+#     stop_tokens: List[str] = ["\nA:"],
+#     structured_output_options: Optional[
+#         Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
+#     ] = None,
+#     seed: int = 42,
+#     client_model_name: Optional[str] = None,
+#     api_concurrency: int = 10,
+#     print_conversation: bool = False,
+#     print_progress: bool = True,
+#     **generation_kwargs: Any,
+# ):
+#     """
+#     Generate responses for a batch of prompts.
 
-    sampling_params = _create_sampling_params(
-        batch_size=len(batch_messages),
-        seeds=seeds,
-        response_generation_method=response_generation_method,
-        use_vllm=False,
-        **generation_kwargs,
-    )
+#     Handles both vLLM and OpenAI API generation with support for:
+#     - Structured output (JSON or choice format)
+#     - Conversation printing
+#     - Progress tracking
+#     - Concurrent API requests
 
-    def thread_target():
-        try:
-            res = asyncio.run(
-                _run_api_batch_async(
-                    client=client,
-                    client_model_name=client_model_name,
-                    batch_messages=batch_messages,
-                    seeds=seeds,
-                    concurrency_limit=concurrency_limit,
-                    print_progress=print_progress,
-                    response_generation_method=response_generation_method,
-                    sampling_params=sampling_params,
-                    **generation_kwargs,
-                )
-            )
-            result_container["result"] = res
-        except Exception as e:
-            result_container["error"] = e
+#     Args:
+#         model: vLLM model or AsyncOpenAI client
+#         system_messages: System prompts for each conversation
+#         prompts: User prompts to generate responses for
+#         structured_output_options: Configuration for structured output
+#         seed: Random seed for reproducibility
+#         client_model_name: Model name when using OpenAI API
+#         api_concurrency: Max concurrent API requests
+#         print_conversation: If True, prints conversations
+#         print_progress: If True, shows progress bar
+#         **generation_kwargs: Additional generation parameters
 
-    thread = threading.Thread(target=thread_target)
-    thread.start()
-    thread.join()
+#     Returns:
+#         List[str]: Generated responses
+#     """
+#     random.seed(seed)
 
-    if "error" in result_container:
-        raise result_container["error"]
+#     batch_size: int = len(prompts)
 
-    return result_container.get("result")
+#     seeds = _generate_seeds(seed, batch_size=batch_size)
 
+#     if isinstance(model, LLM):
+#         sampling_params_list = _create_sampling_params(
+#             batch_size=batch_size,
+#             seeds=seeds,
+#             structured_output_options=structured_output_options,
+#             stop_tokens=stop_tokens,
+#             **generation_kwargs,
+#         )
+#         outputs: List[RequestOutput] = model.generate(
+#             prompts,
+#             sampling_params=sampling_params_list,
+#             use_tqdm=print_progress,
+#         )
+#         result = [output.outputs[0].text for output in outputs]
 
-async def _run_api_batch_async(
-    client: AsyncOpenAI,
-    client_model_name: str,
-    batch_messages: List[List[Dict[str, str]]],
-    seeds: List[int],
-    concurrency_limit: int = 10,
-    print_progress: bool = True,
-    sampling_params: List[Dict[str, Any]] = [],
-    response_generation_method: Optional[
-        Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
-    ] = None,
-    **generation_kwargs,
-) -> List[str]:
-    semaphore = asyncio.Semaphore(concurrency_limit)
+#     else:
+#         result = _run_async_in_thread(
+#             client=model,
+#             client_model_name=client_model_name,
+#             batch_messages=prompts,
+#             seeds=seeds,
+#             concurrency_limit=api_concurrency,
+#             structured_output_options=structured_output_options,
+#             **generation_kwargs,
+#         )
 
-    async def get_completion(
-        messages: list,
-        seed: int,
-        sampling_params: Optional[Union[Dict[str, Any], List[str]]] = None,
-        response_generation_method: Optional[
-            Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
-        ] = None,
-        **generation_kwargs,
-    ) -> ChatCompletion:
-        async with semaphore:
-            request_kwargs = {
-                "model": client_model_name,
-                "messages": messages,
-                "seed": seed,
-                **generation_kwargs,
-            }
+#     # TODO add argurment to specify how many conversations should be printed (base argument should be reasonable)
+#     if print_conversation:
+#         conversation_print = "Conversation:"
+#         for prompt, answer in zip(prompts, result):
+#             round_print = f"{conversation_print}\nUser Message:\n{prompt}\nGenerated Message\n{answer}"
+#             print(round_print, flush=True)
+#             break
 
-            if response_generation_method:
-                if isinstance(response_generation_method, JSONResponseGenerationMethod):
-                    request_kwargs["response_format"] = {
-                        "type": "json_schema",
-                        "json_schema": {
-                            "name": "json_schema",
-                            "schema": sampling_params,
-                        },
-                    }
-                elif isinstance(
-                    response_generation_method, ChoiceResponseGenerationMethod
-                ):
-                    # TODO: add warning if this is not running against vllm, i.e., choice is not supported
-                    request_kwargs["extra_body"] = {
-                        "structured_outputs": {"choice" : sampling_params}
-                    }
-
-            return await client.chat.completions.create(**request_kwargs)
-
-    # pbar = tqdm.tqdm if print_progress else lambda x: x
-
-    if len(sampling_params) > 0:
-        tasks = [
-            get_completion(messages, seed, struct_output, rgm, **generation_kwargs)
-            for messages, seed, struct_output, rgm in zip(
-                batch_messages,
-                seeds,
-                sampling_params,
-                response_generation_method,
-            )
-        ]
-    else:
-        tasks = [
-            get_completion(messages, seed, **generation_kwargs)
-            for messages, seed in zip(batch_messages, seeds)
-        ]
-    if print_progress:
-        responses = await tqdm_asyncio.gather(*tasks, desc="Processing Prompts")
-    else:
-        responses = await asyncio.gather(
-            *tasks, return_exceptions=True, desc="Processing Prompts"
-        )
-
-    final_results = []
-    for res in responses:
-        if isinstance(res, Exception):
-            print(f"A request failed permanently after all retries: {res}")
-            final_results.append(f"Error: {res}")
-        else:
-            final_results.append(res.choices[0].message.content)
-
-    return final_results
-
-
-def batch_decoding(
-    model: Union[LLM, AsyncOpenAI],
-    prompts: List[str] = ["Hi there! What is your name?"],
-    stop_tokens: List[str] = ["\nA:"],
-    structured_output_options: Optional[
-        Union[ResponseGenerationMethod, List[ResponseGenerationMethod]]
-    ] = None,
-    seed: int = 42,
-    client_model_name: Optional[str] = None,
-    api_concurrency: int = 10,
-    print_conversation: bool = False,
-    print_progress: bool = True,
-    **generation_kwargs: Any,
-):
-    """
-    Generate responses for a batch of prompts.
-
-    Handles both vLLM and OpenAI API generation with support for:
-    - Structured output (JSON or choice format)
-    - Conversation printing
-    - Progress tracking
-    - Concurrent API requests
-
-    Args:
-        model: vLLM model or AsyncOpenAI client
-        system_messages: System prompts for each conversation
-        prompts: User prompts to generate responses for
-        structured_output_options: Configuration for structured output
-        seed: Random seed for reproducibility
-        client_model_name: Model name when using OpenAI API
-        api_concurrency: Max concurrent API requests
-        print_conversation: If True, prints conversations
-        print_progress: If True, shows progress bar
-        **generation_kwargs: Additional generation parameters
-
-    Returns:
-        List[str]: Generated responses
-    """
-    random.seed(seed)
-
-    batch_size: int = len(prompts)
-
-    seeds = _generate_seeds(seed, batch_size=batch_size)
-
-    if isinstance(model, LLM):
-        sampling_params_list = _create_sampling_params(
-            batch_size=batch_size,
-            seeds=seeds,
-            structured_output_options=structured_output_options,
-            stop_tokens=stop_tokens,
-            **generation_kwargs,
-        )
-        outputs: List[RequestOutput] = model.generate(
-            prompts,
-            sampling_params=sampling_params_list,
-            use_tqdm=print_progress,
-        )
-        result = [output.outputs[0].text for output in outputs]
-
-    else:
-        result = _run_async_in_thread(
-            client=model,
-            client_model_name=client_model_name,
-            batch_messages=prompts,
-            seeds=seeds,
-            concurrency_limit=api_concurrency,
-            structured_output_options=structured_output_options,
-            **generation_kwargs,
-        )
-
-    # TODO add argurment to specify how many conversations should be printed (base argument should be reasonable)
-    if print_conversation:
-        conversation_print = "Conversation:"
-        for prompt, answer in zip(prompts, result):
-            round_print = f"{conversation_print}\nUser Message:\n{prompt}\nGenerated Message\n{answer}"
-            print(round_print, flush=True)
-            break
-
-    return result
+#     return result

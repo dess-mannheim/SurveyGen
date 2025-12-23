@@ -97,8 +97,6 @@ def conduct_survey_single_item(
     n_save_step: Optional[int] = None,
     intermediate_save_file: Optional[str] = None,
     seed: int = 42,
-    chat_template: Optional[str] = None,
-    chat_template_kwargs: Dict[str, Any] = {},
     **generation_kwargs: Any,
 ) -> List[InferenceResult]:
     """
@@ -114,8 +112,6 @@ def conduct_survey_single_item(
         n_save_step: Save intermediate results every n steps.
         intermediate_save_file: Path to save intermediate results.
         seed: Random seed for reproducibility.
-        chat_template: Optionally pass a specific chat template string.
-        chat_template_kwargs: Arguments to pass to the chat template (e.g., to disable reasoning).
         **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or client.chat.completions.create().
 
     Returns:
@@ -167,7 +163,6 @@ def conduct_survey_single_item(
             )
             for questionnaire in current_batch
         ]
-
         output, logprobs, reasoning_output = batch_generation(
             model=model,
             system_messages=system_messages,
@@ -178,8 +173,6 @@ def conduct_survey_single_item(
             print_conversation=print_conversation,
             print_progress=print_progress,
             seed=seed,
-            chat_template=chat_template,
-            chat_template_kwargs=chat_template_kwargs,
             **generation_kwargs,
         )
 
@@ -290,8 +283,6 @@ def conduct_survey_battery(
     print_conversation: bool = False,
     print_progress: bool = True,
     seed: int = 42,
-    chat_template: Optional[str] = None,
-    chat_template_kwargs: Dict[str, Any] = {},
     item_separator: str = "\n",
     **generation_kwargs: Any,
 ) -> List[InferenceResult]:
@@ -308,8 +299,6 @@ def conduct_survey_battery(
         n_save_step: Save intermediate results every n steps.
         intermediate_save_file: Path to save intermediate results.
         seed: Random seed for reproducibility.
-        chat_template: Optionally pass a specific chat template string.
-        chat_template_kwargs: Arguments to pass to the chat template (e.g., to disable reasoning).
         item_seperator: Which String should separate the items, defaults to "\n".
         **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or client.chat.completions.create().
 
@@ -372,8 +361,6 @@ def conduct_survey_battery(
             print_conversation=print_conversation,
             print_progress=print_progress,
             seed=seed,
-            chat_template=chat_template,
-            chat_template_kwargs=chat_template_kwargs,
             **generation_kwargs,
         )
 
@@ -431,8 +418,6 @@ def conduct_survey_sequential(
         n_save_step: Save intermediate results every n steps.
         intermediate_save_file: Path to save intermediate results.
         seed: Random seed for reproducibility.
-        chat_template: Optionally pass a specific chat template string.
-        chat_template_kwargs: Arguments to pass to the chat template (e.g., to disable reasoning).
         item_seperator: Which String should separate the items, defaults to "\n".
         **generation_kwargs: Additional generation parameters that will be given to vllm.chat() or client.chat.completions.create().
 
